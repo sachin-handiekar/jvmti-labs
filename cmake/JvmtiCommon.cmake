@@ -1,0 +1,43 @@
+# JvmtiCommon.cmake — Shared CMake configuration for all JVMTI agent labs
+#
+# Usage (in each lab's CMakeLists.txt):
+#   cmake_minimum_required(VERSION 3.10)
+#   project(<agent_name> C)
+#   include(${CMAKE_CURRENT_LIST_DIR}/../cmake/JvmtiCommon.cmake)
+#   add_jvmti_agent(<agent_name> <source_file.c>)
+
+cmake_minimum_required(VERSION 3.10)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# Portable JNI/JVMTI header discovery — works on Linux, macOS, and Windows
+find_package(JNI REQUIRED)
+
+# Convenience function: creates a shared library target with correct includes and naming
+function(add_jvmti_agent TARGET_NAME)
+    # All remaining arguments are source files
+    set(SOURCE_FILES ${ARGN})
+
+    add_library(${TARGET_NAME} SHARED ${SOURCE_FILES})
+
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${JNI_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common
+    )
+
+    # Keep the platform's conventional naming (§2.7):
+    # libagent.so (Linux), libagent.dylib (macOS), agent.dll (Windows)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        OUTPUT_NAME "${TARGET_NAME}"
+    )
+
+    # Enable warnings for better code quality. JVMTI callback signatures
+    # are fixed by the spec, so unused-parameter warnings are suppressed.
+    if(MSVC)
+        target_compile_options(${TARGET_NAME} PRIVATE /W4 /wd4100)
+    else()
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -Wall -Wextra -Wpedantic -Wno-unused-parameter)
+    endif()
+endfunction()
