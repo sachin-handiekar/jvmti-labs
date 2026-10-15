@@ -33,6 +33,7 @@ jobs:
           - lab04_thread_class_inspection
           - lab05_heap_stack_agent
           - lab06_class_transform_agent
+          - lab06b_class_patcher
           - lab07_jvm_runtime_agent
           - lab08_exception_agent
           - lab09_advanced_techniques
