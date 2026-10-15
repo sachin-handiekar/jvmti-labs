@@ -39,6 +39,8 @@ fi
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# A solution reuses its lab's test app unless it brings its own
+case "$LAB" in */solutions/*) cp ../../*.java "$WORK"/ 2>/dev/null || true ;; esac
 cp ./*.java "$WORK"/ 2>/dev/null || true
 cd "$WORK"
 shopt -s nullglob
@@ -258,6 +260,82 @@ lab13_allocation_tracker)
     expect report.json '"sampled_allocations": [1-9][0-9]*'
     expect report.json '"class": "\[B"'
     reject report.json '"class": "\[C"'
+    ;;
+
+# ---- Exercise solutions (one per chapter) ----------------------------
+
+lab01_capability_checker/solutions/startup_vs_live)
+    run "" -version
+    expect out.txt '^44 capabilities: 44 available at startup, [0-9]+ once the VM is live$'
+    expect out.txt '^  can_generate_method_entry_events$'   # lost after startup
+    ;;
+lab02_basic_agent/solutions/phases)
+    run "" HelloApp
+    expect out.txt '^\[Phase\] Agent_OnLoad  -> ONLOAD$'
+    expect out.txt '^\[Phase\] VMStart       -> START$'
+    expect out.txt '^\[Phase\] VMInit        -> LIVE$'
+    expect out.txt '^\[Phase\] VMDeath       -> LIVE$'
+    ;;
+lab03_event_registration/solutions/filter)
+    run "filter=EventTestApp" EventTestApp
+    expect out.txt '^\[Filter\] MethodEntry events: [0-9]{4,} total, [1-9][0-9]? in classes starting with "EventTestApp"'
+    ;;
+lab04_thread_class_inspection/solutions/lock_info)
+    run "" StackTestApp
+    expect out.txt '^"LockHolder" owns <java/lang/Object@[0-9a-f]+>$'
+    expect out.txt '^"Blocked" is BLOCKED entering <java/lang/Object@[0-9a-f]+>, owned by "LockHolder"$'
+    ;;
+lab05_heap_stack_agent/solutions/who_holds_it)
+    run "" HeapStackTestApp
+    expect out.txt 'level 1: 20000 reference\(s\) from \[Ljava/lang/Object; \(array element\)$'
+    expect out.txt 'level 2: 1 reference\(s\) from Ljava/util/ArrayList; \(instance field\)$'
+    expect out.txt 'level 3: 1 reference\(s\) from LHeapStackTestApp; \(static field\)$'
+    ;;
+lab06b_class_patcher/solutions/int_constant)
+    run "" IntPatchTestApp
+    expect out.txt '^\[IntPatcher\] Patched IntPatchTestApp: 100000 -> 250000 '
+    expect out.txt '^Daily limit: 250000$'
+    ;;
+lab07_jvm_runtime_agent/solutions/gc_histogram)
+    run "" RuntimeTestApp
+    n=$(sed -n 's/^\[GC\] Pause histogram (\([0-9]*\) collections):$/\1/p' out.txt)
+    [ -n "$n" ] && [ "$n" -gt 0 ] || fail "no collections reported"
+    # each bucket line ends with its count (then the bar of #s)
+    sum=$(grep -E '^\[GC\]   ' out.txt | awk '{for (i=NF;i>=1;i--) if ($i ~ /^[0-9]+$/) {s+=$i; break}} END{print s}')
+    [ "$sum" = "$n" ] || fail "histogram buckets sum to $sum, expected $n"
+    echo "ok: $n collections, buckets sum to $sum"
+    ;;
+lab08b_mini_debugger/solutions/return_value)
+    run "" DebugTestApp
+    expect out.txt '^\[ReturnWatch\] checkout\(\) called; watching for its return$'
+    expect out.txt '^\[ReturnWatch\] checkout\(\) returned 55$'
+    ;;
+lab09_advanced_techniques/solutions/lock_vs_tls)
+    run "mode=lock" AdvancedTestApp
+    expect out.txt '^\[Bench\] mode=lock: [0-9]{4,} method entries in [0-9.]+ ms$'
+    run "mode=tls" AdvancedTestApp
+    expect out.txt '^\[Bench\] mode=tls: [0-9]{4,} method entries in [0-9.]+ ms$'
+    ;;
+lab10_profiler_agent/solutions/self_time)
+    run "" ProfilerTestApp
+    expect out.txt '^\[Profiler\] Top methods by self time \([1-9][0-9]* samples\):$'
+    expect out.txt '^\[Profiler\]   1\. ProfilerTestApp\.(hotMethod|fibonacci) '
+    ;;
+lab11_deployment_agent/solutions/method_timing)
+    run "package=com/example" -cp . com.example.DeployTestApp
+    expect method_timer.log 'com/example/DeployTestApp\.compute\(I\)I took [0-9.]+ ms$'
+    expect method_timer.log '^\[Timing\] com/example/DeployTestApp\.main\(\[Ljava/lang/String;\)V took '
+    ;;
+lab12_stability_agent/solutions/out_of_memory)
+    run "" -Xmx32m OomTestApp
+    expect out.txt '^\[OOM\] ResourceExhausted #1: Java heap space$'
+    expect out.txt '^\[OOM\]   what:   Java heap \(an OutOfMemoryError will be thrown\)$'
+    expect out.txt '^OomTestApp: still running, finished normally$'
+    ;;
+lab13_allocation_tracker/solutions/allocation_sites)
+    run "" AllocTestApp
+    expect out.txt '^\[Sites\] Allocation sites \([1-9][0-9]* samples\):$'
+    expect out.txt '^\[Sites\]   1\. AllocTestApp\.(large|small)Allocations '
     ;;
 *)
     fail "no checks defined for $LAB" ;;

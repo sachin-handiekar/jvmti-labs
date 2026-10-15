@@ -14,6 +14,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Portable JNI/JVMTI header discovery — works on Linux, macOS, and Windows
 find_package(JNI REQUIRED)
 
+# The labs' shared headers, found relative to THIS file, so agents at any
+# depth (lab folders, labNN/solutions/...) can include jvmti_utils.h
+set(JVMTI_LABS_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/../common")
+
 # Convenience function: creates a shared library target with correct includes and naming
 function(add_jvmti_agent TARGET_NAME)
     # All remaining arguments are source files
@@ -26,9 +30,7 @@ function(add_jvmti_agent TARGET_NAME)
     # declaration in jvmti.h itself (-Wstrict-prototypes) once warnings
     # are errors — a problem in the JDK, not in the agent.
     target_include_directories(${TARGET_NAME} SYSTEM PRIVATE ${JNI_INCLUDE_DIRS})
-    target_include_directories(${TARGET_NAME} PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../common
-    )
+    target_include_directories(${TARGET_NAME} PRIVATE ${JVMTI_LABS_COMMON_DIR})
 
     # Keep the platform's conventional naming (§2.7):
     # libagent.so (Linux), libagent.dylib (macOS), agent.dll (Windows)

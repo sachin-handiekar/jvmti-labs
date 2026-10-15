@@ -104,3 +104,54 @@ jobs:
           name: ${{ matrix.project }}-ubuntu
           path: ${{ matrix.project }}/build/
           retention-days: 7
+
+  # Worked solutions to the book's ★ exercises, one per chapter
+  solutions:
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+        solution:
+          - lab01_capability_checker/solutions/startup_vs_live
+          - lab02_basic_agent/solutions/phases
+          - lab03_event_registration/solutions/filter
+          - lab04_thread_class_inspection/solutions/lock_info
+          - lab05_heap_stack_agent/solutions/who_holds_it
+          - lab06b_class_patcher/solutions/int_constant
+          - lab07_jvm_runtime_agent/solutions/gc_histogram
+          - lab08b_mini_debugger/solutions/return_value
+          - lab09_advanced_techniques/solutions/lock_vs_tls
+          - lab10_profiler_agent/solutions/self_time
+          - lab11_deployment_agent/solutions/method_timing
+          - lab12_stability_agent/solutions/out_of_memory
+          - lab13_allocation_tracker/solutions/allocation_sites
+
+    runs-on: ubuntu-latest
+    name: ${{ matrix.solution }} (JDK ${{ matrix.java }})
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+
+      - name: Configure and build solution (warnings are errors)
+        working-directory: ${{ matrix.solution }}
+        run: |
+          if ! { cmake -S . -B build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON &&
+                 cmake --build build --config Release; } > build.log 2>&1; then
+            cat build.log
+            grep -iE '(error|warning)[ :]' build.log | head -10 |
+              while IFS= read -r line; do
+                echo "::error title=${{ matrix.solution }} build::${line//%/%25}"
+              done
+            exit 1
+          fi
+          cat build.log
+
+      - name: Run test app and verify output
+        run: bash ci/run_lab.sh ${{ matrix.solution }}
