@@ -32,6 +32,29 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 | common/   | `jvmti_utils.h` -- shared macros (`CHECK_JVMTI_ERROR`), logging |
 | cmake/    | `JvmtiCommon.cmake` -- CMake module for JNI/JVMTI setup         |
 
+## Exercise Solutions
+
+Every chapter of the book ends with exercises. The one marked ★ has a worked solution here, in the
+chapter's lab under `solutions/`. Each builds like a lab (`cmake -S . -B build && cmake --build build`),
+reuses its lab's test app unless it has its own, and is checked in CI on Linux with JDK 17, 21 and 25
+(`bash ci/run_lab.sh <solution-dir>` runs the same check locally).
+
+| Ch | Solution | What it shows |
+|----|----------|---------------|
+| 1 | `lab01_capability_checker/solutions/startup_vs_live` | Capabilities available at startup vs. once the JVM is running |
+| 2 | `lab02_basic_agent/solutions/phases` | The JVM phase in every lifecycle callback |
+| 3 | `lab03_event_registration/solutions/filter` | `filter=` option: application vs. JDK method entries |
+| 4 | `lab04_thread_class_inspection/solutions/lock_info` | Lock report: owned and contended monitors, and their owners |
+| 5 | `lab05_heap_stack_agent/solutions/who_holds_it` | Leak path with `FollowReferences`: who keeps the objects alive |
+| 6 | `lab06b_class_patcher/solutions/int_constant` | Patch an `int` constant in the constant pool |
+| 7 | `lab07_jvm_runtime_agent/solutions/gc_histogram` | GC pause histogram |
+| 8 | `lab08b_mini_debugger/solutions/return_value` | A method's return value via per-thread `MethodExit` |
+| 9 | `lab09_advanced_techniques/solutions/lock_vs_tls` | Lock per call vs. thread-local counting, measured |
+| 10 | `lab10_profiler_agent/solutions/self_time` | Top methods by self time |
+| 11 | `lab11_deployment_agent/solutions/method_timing` | Method durations with entry/exit events and TLS |
+| 12 | `lab12_stability_agent/solutions/out_of_memory` | Notice heap exhaustion with `ResourceExhausted` |
+| 13 | `lab13_allocation_tracker/solutions/allocation_sites` | Allocation sites: where samples were allocated |
+
 ## Build Instructions
 
 All labs use CMake for cross-platform builds. CI builds every lab with warnings treated as errors and runs it
