@@ -140,7 +140,7 @@ static void JNICALL cbThreadEnd(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
 
     char buf[256];
     snprintf(buf, sizeof(buf), "[CPU] thread \"%s\" used %.3f ms of CPU",
-             tinfo.name ? tinfo.name : "<unnamed>", cpu_ns / 1e6);
+             tinfo.name ? tinfo.name : "<unnamed>", (double)cpu_ns / 1e6);
     jvmti_log(LOG_FILE, buf);
     if (tinfo.name) (*jvmti)->Deallocate(jvmti, (unsigned char*)tinfo.name);
 }
@@ -155,9 +155,9 @@ static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
         snprintf(buf, sizeof(buf),
                  "[GC] %ld collections, total %.3f ms, max %.3f ms, avg %.3f ms",
                  gc_count,
-                 gc_total_ns / 1e6,
-                 gc_max_ns / 1e6,
-                 gc_total_ns / 1e6 / gc_count);
+                 (double)gc_total_ns / 1e6,
+                 (double)gc_max_ns / 1e6,
+                 (double)gc_total_ns / 1e6 / (double)gc_count);
     } else {
         snprintf(buf, sizeof(buf), "[GC] No collections observed.");
     }

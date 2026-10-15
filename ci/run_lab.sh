@@ -14,13 +14,28 @@ set -euo pipefail
 LAB="${1:?usage: run_lab.sh <lab_dir> [agent_library]}"
 cd "$(dirname "$0")/../$LAB"
 
+# fail <message> — report and stop. On GitHub Actions the message also
+# becomes an annotation, shown on the run's page without opening the logs.
+fail() {
+    echo "FAIL: $*"
+    if [ "${GITHUB_ACTIONS:-}" = true ]; then echo "::error title=$LAB::$*"; fi
+    exit 1
+}
+
 AGENT="${2:-}"
 if [ -z "$AGENT" ]; then
     AGENT=$(find build -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) | head -1)
 fi
-[ -n "$AGENT" ] && [ -f "$AGENT" ] || { echo "FAIL: no agent library for $LAB"; exit 1; }
+[ -n "$AGENT" ] && [ -f "$AGENT" ] || fail "no agent library built for $LAB"
 AGENT=$(cd "$(dirname "$AGENT")" && pwd)/$(basename "$AGENT")
 if command -v cygpath >/dev/null 2>&1; then AGENT=$(cygpath -w "$AGENT"); fi
+
+# A hung JVM must not hang CI. macOS has no `timeout` by default
+# (Homebrew's coreutils installs it as `gtimeout`).
+if command -v timeout >/dev/null 2>&1; then TIMEOUT="timeout 120"
+elif command -v gtimeout >/dev/null 2>&1; then TIMEOUT="gtimeout 120"
+else TIMEOUT=""
+fi
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -39,13 +54,13 @@ run() {
     [ -n "$opts" ] && agentarg="$agentarg=$opts"
     echo "+ java $agentarg $*"
     set +e
-    timeout 120 java "$agentarg" "$@" > out.txt 2>&1
+    $TIMEOUT java "$agentarg" "$@" > out.txt 2>&1
     local rc=$?
     set -e
     cat out.txt
     echo "(exit code $rc)"
     if [ "$rc" -ne 0 ] && [ "${ALLOW_FAIL:-0}" != 1 ]; then
-        echo "FAIL: JVM exited with $rc"; exit 1
+        fail "JVM exited with $rc"
     fi
 }
 
@@ -54,18 +69,16 @@ expect() {
     if grep -Eq -- "$2" "$1"; then
         echo "ok: $1 matches /$2/"
     else
-        echo "FAIL: $1 has no line matching /$2/"
         echo "---- $1 ----"; cat "$1" || true
-        exit 1
+        fail "$1 has no line matching /$2/"
     fi
 }
 
 # reject <file> <extended regex> — the file must NOT contain a matching line
 reject() {
     if grep -Eq -- "$2" "$1"; then
-        echo "FAIL: $1 unexpectedly matches /$2/"
         echo "---- $1 ----"; cat "$1"
-        exit 1
+        fail "$1 unexpectedly matches /$2/"
     fi
     echo "ok: $1 does not match /$2/"
 }
@@ -143,7 +156,7 @@ lab06b_class_patcher)
         [ -n "$PID" ] && break
         sleep 0.25
     done
-    [ -n "$PID" ] || { echo "FAIL: PatchTestApp did not start"; cat app.txt; exit 1; }
+    [ -n "$PID" ] || { cat app.txt; fail "PatchTestApp did not start"; }
     sleep 1.5   # let a few unpatched lines print first
     echo "+ java AgentLoader $PID <agent>"
     java -cp .. AgentLoader "$PID" "$AGENT"
@@ -225,7 +238,7 @@ lab11_deployment_agent)
         [ -n "$PID" ] && break
         sleep 0.25
     done
-    [ -n "$PID" ] || { echo "FAIL: DeployTestApp did not start"; cat app.txt; exit 1; }
+    [ -n "$PID" ] || { cat app.txt; fail "DeployTestApp did not start"; }
     echo "+ java AgentLoader $PID <agent> package=com/example,thread_events"
     java -cp .. AgentLoader "$PID" "$AGENT" "package=com/example,thread_events"
     wait $APP
@@ -247,7 +260,7 @@ lab13_allocation_tracker)
     reject report.json '"class": "\[C"'
     ;;
 *)
-    echo "FAIL: no checks defined for $LAB"; exit 1 ;;
+    fail "no checks defined for $LAB" ;;
 esac
 
 echo "PASS: $LAB"

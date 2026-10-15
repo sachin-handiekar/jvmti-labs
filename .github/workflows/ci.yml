@@ -25,6 +25,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Linux runs every supported JDK; macOS (Clang) and Windows (MSVC)
+        # run one, to prove the labs build and work on each platform
+        os: [ubuntu-latest, macos-latest, windows-latest]
         java: ['17', '21', '25']
         project:
           - lab01_capability_checker
@@ -43,13 +46,25 @@ jobs:
           - lab11_deployment_agent
           - lab12_stability_agent
           - lab13_allocation_tracker
-        # Virtual threads and their JVMTI API need JDK 21+
         exclude:
+          # Virtual threads and their JVMTI API need JDK 21+
           - java: '17'
             project: lab04b_virtual_threads
+          - os: macos-latest
+            java: '17'
+          - os: macos-latest
+            java: '25'
+          - os: windows-latest
+            java: '17'
+          - os: windows-latest
+            java: '25'
 
-    runs-on: ubuntu-latest
-    name: ${{ matrix.project }} (JDK ${{ matrix.java }})
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.project }} (${{ matrix.os }}, JDK ${{ matrix.java }})
+
+    defaults:
+      run:
+        shell: bash   # Git Bash on Windows
 
     steps:
       - name: Checkout code
@@ -61,13 +76,21 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
 
-      - name: Configure CMake
+      # On failure, compiler errors and warnings are also reported as
+      # annotations, so they show on the run's page without opening logs
+      - name: Configure and build agent (warnings are errors)
         working-directory: ${{ matrix.project }}
-        run: cmake -S . -B build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
-
-      - name: Build agent
-        working-directory: ${{ matrix.project }}
-        run: cmake --build build --config Release
+        run: |
+          if ! { cmake -S . -B build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON &&
+                 cmake --build build --config Release; } > build.log 2>&1; then
+            cat build.log
+            grep -iE '(error|warning)[ :]' build.log | head -10 |
+              while IFS= read -r line; do
+                echo "::error title=${{ matrix.project }} build::${line//%/%25}"
+              done
+            exit 1
+          fi
+          cat build.log
 
       # Runs the lab's test app with the agent loaded and checks the
       # agent's output for the behaviour the lab demonstrates
@@ -75,7 +98,7 @@ jobs:
         run: bash ci/run_lab.sh ${{ matrix.project }}
 
       - name: Upload build artifacts
-        if: matrix.java == '21'
+        if: matrix.os == 'ubuntu-latest' && matrix.java == '21'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.project }}-ubuntu
