@@ -99,6 +99,19 @@ lab04_thread_class_inspection)
     expect $L '^"TimedWaiter" TIMED_WAITING'   # wait(ms): not SLEEPING
     expect $L '^"Blocked" BLOCKED'
     ;;
+lab04b_virtual_threads)
+    run "" VirtualThreadTestApp
+    expect out.txt '^\[VThreads\] VirtualThreadStart events: 11000$'
+    expect out.txt '^\[VThreads\] VirtualThreadEnd events:   1000$'
+    expect out.txt '^\[VThreads\] Virtual threads alive:     10000$'
+    # ThreadStart never fires for virtual threads: only a handful of platform threads
+    expect out.txt '^\[VThreads\] ThreadStart events: +[0-9]{1,3} '
+    # GetAllThreads returns no virtual threads, but does include carriers
+    expect out.txt 'GetAllThreads returned: +[0-9]+ threads: 0 virtual, [1-9][0-9]* carrier'
+    # Stacks of unmounted virtual threads are readable
+    expect out.txt '^\[VThreads\] Sample "parked-[0-9]+": virtual=yes state=WAITING$'
+    expect out.txt 'at LVirtualThreadTestApp;\.waitForever$'
+    ;;
 lab05_heap_stack_agent)
     run "" HeapStackTestApp
     L=heap_stack_agent.log

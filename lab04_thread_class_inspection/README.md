@@ -44,3 +44,5 @@ java -agentpath:./build/libthread_class_inspection_agent.so StackTestApp
   callback, i.e. executing native agent code
 - Line numbers require classes compiled with `javac -g`; JDK classes show them because
   the JDK ships debug info
+- This agent only sees **platform** threads: `GetAllThreads` never returns virtual threads
+  (JDK 21+). See lab 04b for how to observe them

@@ -12,6 +12,7 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 | 2   | lab02_basic_agent                   | Agent lifecycle, options parsing, event registration       |
 | 3   | lab03_event_registration            | Capabilities, event callbacks, method/thread tracking      |
 | 4   | lab04_thread_class_inspection       | Thread dump: states (incl. TIMED_WAITING vs WAITING), stack walking, line numbers |
+| 4b  | lab04b_virtual_threads              | Virtual threads (JDK 21+): what GetAllThreads and ThreadStart miss, and how to see them |
 | 5   | lab05_heap_stack_agent              | Heap walking with IterateThroughHeap, stack analysis       |
 | 6   | lab06_class_transform_agent         | Class load monitor built on ClassFileLoadHook              |
 | 6b  | lab06b_class_patcher                | Bytecode rewriting: patch a class at load time, or retransform it in a running JVM |
@@ -72,6 +73,7 @@ See the `README.md` in each lab directory for specific instructions.
 - **Basic Agent** -- demonstrates the complete agent lifecycle (`Agent_OnLoad`/`Agent_OnUnload`) and `key=value` option parsing
 - **Event Registration** -- the three-step event model: capabilities, callbacks, notification modes
 - **Thread/Class Inspection** -- Java-style thread dump with states, stack frames, and source lines
+- **Virtual Threads** -- `VirtualThreadStart`/`End`, and why `GetAllThreads` never returns virtual threads (JDK 21+)
 - **Heap/Stack Analysis** -- walks the heap with the modern `IterateThroughHeap` API, dumps thread stacks
 - **Class Load Monitor** -- sees every class's bytecode via ClassFileLoadHook, with JDK filtering and a load summary
 - **Class Patcher** -- rewrites a string literal in a class's constant pool, at load time or via `RetransformClasses` after attach
