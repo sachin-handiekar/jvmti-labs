@@ -34,7 +34,9 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 
 ## Build Instructions
 
-All labs use CMake for cross-platform builds. Prerequisites:
+All labs use CMake for cross-platform builds. CI builds every lab with warnings treated as errors and runs it
+against its test app on **Linux (GCC)**, **macOS (Clang)** and **Windows (MSVC)** — JDK 17, 21 and 25 on
+Linux, JDK 21 on macOS and Windows (lab 04b, virtual threads, needs JDK 21+). Prerequisites:
 
 - A C/C++ compiler (GCC, Clang, or MSVC)
 - CMake 3.10+
