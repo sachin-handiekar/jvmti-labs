@@ -103,9 +103,11 @@ static int patch_string_literal(jvmtiEnv *jvmti,
     size_t pos = 10, from_len = strlen(from);
     unsigned match = 0, string_refs_match = 0;
     for (unsigned i = 1; i < cp_count; i++) {
-        if (pos >= n) goto malformed;
-        size_t size = cp_entry_size(data + pos, n - pos);
-        if (size == 0 || pos + size > n) goto malformed;
+        size_t size = pos < n ? cp_entry_size(data + pos, n - pos) : 0;
+        if (size == 0 || pos + size > n) {   /* malformed: leave it alone */
+            free(offset);
+            return 0;
+        }
         offset[i] = pos;
         if (data[pos] == CP_UTF8 && size - 3 == from_len &&
             memcmp(data + pos + 3, from, from_len) == 0)
@@ -144,10 +146,6 @@ static int patch_string_literal(jvmtiEnv *jvmti,
     *out = buf;
     *out_len = (jint)new_len;
     return 1;
-
-malformed:
-    free(offset);
-    return 0;
 }
 
 /* ------------------------------------------------------------------ */

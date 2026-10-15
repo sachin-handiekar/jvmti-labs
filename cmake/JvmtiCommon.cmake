@@ -21,8 +21,12 @@ function(add_jvmti_agent TARGET_NAME)
 
     add_library(${TARGET_NAME} SHARED ${SOURCE_FILES})
 
+    # The JDK's headers are included as SYSTEM headers: compilers don't
+    # warn about code in them. Without this, Clang on macOS rejects a
+    # declaration in jvmti.h itself (-Wstrict-prototypes) once warnings
+    # are errors — a problem in the JDK, not in the agent.
+    target_include_directories(${TARGET_NAME} SYSTEM PRIVATE ${JNI_INCLUDE_DIRS})
     target_include_directories(${TARGET_NAME} PRIVATE
-        ${JNI_INCLUDE_DIRS}
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
     )
 
@@ -36,6 +40,11 @@ function(add_jvmti_agent TARGET_NAME)
     # are fixed by the spec, so unused-parameter warnings are suppressed.
     if(MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE /W4 /wd4100)
+        # The labs use portable standard C (strncpy, fopen, strtok...).
+        # MSVC flags those as "unsafe" (C4996) in favour of its own _s
+        # variants; accept the standard ones.
+        target_compile_definitions(${TARGET_NAME} PRIVATE
+            _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
     else()
         target_compile_options(${TARGET_NAME} PRIVATE
             -Wall -Wextra -Wpedantic -Wno-unused-parameter)

@@ -58,8 +58,51 @@ static jint JNICALL heap_iteration_cb(jlong class_tag, jlong size,
     return JVMTI_VISIT_OBJECTS;
 }
 
-static void dump_heap_histogram(jvmtiEnv *jvmti) {
+/* Walk the heap once, then print totals and the TOP_N classes by bytes */
+static void walk_and_report(jvmtiEnv *jvmti, jclass *classes, histogram_t *h) {
     char buf[1024];
+    jvmtiHeapCallbacks callbacks;
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.heap_iteration_callback = &heap_iteration_cb;
+
+    jvmti_log(LOG_FILE, "[Heap] Walking the heap...");
+    jvmtiError err = (*jvmti)->IterateThroughHeap(jvmti,
+                                       0,      /* heap_filter: 0 = no filter */
+                                       NULL,   /* klass: NULL = all classes */
+                                       &callbacks,
+                                       h);     /* user_data -> callback */
+    CHECK_JVMTI_ERROR(jvmti, err, "IterateThroughHeap");
+    if (err != JVMTI_ERROR_NONE) return;
+
+    snprintf(buf, sizeof(buf),
+             "[Heap] %lld objects, %lld bytes in %d classes",
+             (long long)h->total_objects, (long long)h->total_bytes,
+             (int)h->class_count);
+    jvmti_log(LOG_FILE, buf);
+    jvmti_log(LOG_FILE, "[Heap] Top classes by shallow size:");
+    jvmti_log(LOG_FILE, "  rank     objects        bytes  class");
+
+    /* Pick the TOP_N largest by bytes (simple selection; n is small) */
+    for (int rank = 1; rank <= TOP_N; rank++) {
+        jint best = 0;
+        for (jint t = 1; t <= h->class_count; t++) {
+            if (h->bytes[t] > 0 && (best == 0 || h->bytes[t] > h->bytes[best]))
+                best = t;
+        }
+        if (best == 0) break;
+
+        char *sig = NULL;
+        (*jvmti)->GetClassSignature(jvmti, classes[best - 1], &sig, NULL);
+        snprintf(buf, sizeof(buf), "  %4d  %10lld  %11lld  %s", rank,
+                 (long long)h->objects[best], (long long)h->bytes[best],
+                 sig ? sig : "?");
+        jvmti_log(LOG_FILE, buf);
+        if (sig) (*jvmti)->Deallocate(jvmti, (unsigned char*)sig);
+        h->bytes[best] = -h->bytes[best];   /* mark as printed */
+    }
+}
+
+static void dump_heap_histogram(jvmtiEnv *jvmti) {
     jint class_count = 0;
     jclass *classes = NULL;
     jvmtiError err = (*jvmti)->GetLoadedClasses(jvmti, &class_count, &classes);
@@ -71,52 +114,13 @@ static void dump_heap_histogram(jvmtiEnv *jvmti) {
         (*jvmti)->SetTag(jvmti, classes[i], (jlong)(i + 1));
     }
 
-    histogram_t h = { class_count, NULL, NULL, 0, 0 };
+    histogram_t h;
+    memset(&h, 0, sizeof(h));
+    h.class_count = class_count;
     h.objects = calloc((size_t)class_count + 1, sizeof(jlong));
     h.bytes   = calloc((size_t)class_count + 1, sizeof(jlong));
-    if (!h.objects || !h.bytes) goto done;
+    if (h.objects && h.bytes) walk_and_report(jvmti, classes, &h);
 
-    jvmtiHeapCallbacks callbacks;
-    memset(&callbacks, 0, sizeof(callbacks));
-    callbacks.heap_iteration_callback = &heap_iteration_cb;
-
-    jvmti_log(LOG_FILE, "[Heap] Walking the heap...");
-    err = (*jvmti)->IterateThroughHeap(jvmti,
-                                       0,      /* heap_filter: 0 = no filter */
-                                       NULL,   /* klass: NULL = all classes */
-                                       &callbacks,
-                                       &h);    /* user_data -> callback */
-    CHECK_JVMTI_ERROR(jvmti, err, "IterateThroughHeap");
-    if (err != JVMTI_ERROR_NONE) goto done;
-
-    snprintf(buf, sizeof(buf),
-             "[Heap] %lld objects, %lld bytes in %d classes",
-             (long long)h.total_objects, (long long)h.total_bytes,
-             (int)class_count);
-    jvmti_log(LOG_FILE, buf);
-    jvmti_log(LOG_FILE, "[Heap] Top classes by shallow size:");
-    jvmti_log(LOG_FILE, "  rank     objects        bytes  class");
-
-    /* Pick the TOP_N largest by bytes (simple selection; n is small) */
-    for (int rank = 1; rank <= TOP_N; rank++) {
-        jint best = 0;
-        for (jint t = 1; t <= class_count; t++) {
-            if (h.bytes[t] > 0 && (best == 0 || h.bytes[t] > h.bytes[best]))
-                best = t;
-        }
-        if (best == 0) break;
-
-        char *sig = NULL;
-        (*jvmti)->GetClassSignature(jvmti, classes[best - 1], &sig, NULL);
-        snprintf(buf, sizeof(buf), "  %4d  %10lld  %11lld  %s", rank,
-                 (long long)h.objects[best], (long long)h.bytes[best],
-                 sig ? sig : "?");
-        jvmti_log(LOG_FILE, buf);
-        if (sig) (*jvmti)->Deallocate(jvmti, (unsigned char*)sig);
-        h.bytes[best] = -h.bytes[best];   /* mark as printed */
-    }
-
-done:
     free(h.objects);
     free(h.bytes);
     (*jvmti)->Deallocate(jvmti, (unsigned char*)classes);
