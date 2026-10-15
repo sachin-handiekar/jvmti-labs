@@ -1,5 +1,7 @@
 # Lab 3 — Capabilities and Events
 
+> **Book:** companion to [Chapter 3: Capabilities and Events in JVMTI](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter3.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 §3.6 "Thread and Method Tracker": demonstrates the three-step event model —
 
 1. **Request capabilities** with `AddCapabilities` (`can_generate_method_entry_events`;

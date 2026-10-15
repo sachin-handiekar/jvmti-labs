@@ -1,5 +1,7 @@
 # Lab 10 — Building a Minimal Profiler
 
+> **Book:** companion to [Chapter 10: Building a Minimal Profiler](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter10.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A minimal **sampling CPU profiler**: a dedicated agent thread periodically snapshots
 every Java thread's stack and aggregates identical stacks into collapsed-stack format,
 ready for flamegraph visualization. This is the same technique used by async-profiler,

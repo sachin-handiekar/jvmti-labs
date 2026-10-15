@@ -65,18 +65,29 @@ static inline jvmtiEnv* jvmti_get_env(JavaVM *vm) {
 
 /**
  * Appends a message line to the given log file.
- * Opens and closes the file on each call (safe for multi-agent use).
+ *
+ * The file is opened once and the stream kept open. stdio streams lock
+ * internally, so each fprintf from concurrent callbacks lands as a whole
+ * line. (Reopening the file for every message loses lines when threads
+ * race: on Windows, append mode is not atomic.) The first call opens the
+ * stream, so make it from Agent_OnLoad, before any callbacks can run.
+ * Each line is flushed immediately so nothing is lost on a crash.
  *
  * NOTE: Do not call from GC or ObjectFree callbacks — those run in a
  * restricted environment where only simple bookkeeping is safe
  * (see §3.7 and §7.3).
  */
 static inline void jvmti_log(const char* filename, const char* msg) {
-    FILE* fp = fopen(filename, "a");
-    if (fp) {
-        fprintf(fp, "%s\n", msg);
-        fclose(fp);
+    static FILE* fp = NULL;
+    static char fp_name[512] = "";
+    if (fp == NULL || strcmp(fp_name, filename) != 0) {
+        if (fp) fclose(fp);
+        fp = fopen(filename, "a");
+        snprintf(fp_name, sizeof(fp_name), "%s", filename);
+        if (!fp) return;
     }
+    fprintf(fp, "%s\n", msg);
+    fflush(fp);
 }
 
 #endif /* JVMTI_UTILS_H */

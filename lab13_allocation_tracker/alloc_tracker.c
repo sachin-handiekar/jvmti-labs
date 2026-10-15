@@ -108,6 +108,43 @@ static void dump_json(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Console report: totals plus the top 5 classes by samples           */
+/* ------------------------------------------------------------------ */
+
+static void print_console_report(void) {
+    long total_samples = 0, total_bytes = 0;
+    for (int i = 0; i < alloc_table_size; i++) {
+        total_samples += alloc_table[i].count;
+        total_bytes   += alloc_table[i].total_bytes;
+    }
+
+    printf("\n[Tracker] === Allocation Report (sampled) ===\n");
+    printf("[Tracker] Classes seen:         %d\n", alloc_table_size);
+    printf("[Tracker] Sampled allocations:  %ld\n", total_samples);
+    printf("[Tracker] Sampled bytes:        %ld\n", total_bytes);
+    printf("[Tracker] Top allocators (by samples):\n");
+
+    /* Simple selection of the top 5 — the table is small */
+    static char printed[MAX_CLASSES];
+    memset(printed, 0, sizeof(printed));
+    for (int rank = 1; rank <= 5 && rank <= alloc_table_size; rank++) {
+        int best = -1;
+        for (int i = 0; i < alloc_table_size; i++) {
+            if (!printed[i] && (best < 0 || alloc_table[i].count > alloc_table[best].count))
+                best = i;
+        }
+        printed[best] = 1;
+        printf("  %d. %s — %ld samples, %ld bytes\n", rank,
+               alloc_table[best].class_sig,
+               alloc_table[best].count,
+               alloc_table[best].total_bytes);
+    }
+
+    printf("[Tracker] Full report: %s\n", output_path);
+    printf("[Tracker] ============================\n");
+}
+
+/* ------------------------------------------------------------------ */
 /*  Event Callbacks                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -144,10 +181,7 @@ static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
 
     (*jvmti)->RawMonitorEnter(jvmti, alloc_lock);
     dump_json();
-
-    /* Print summary to console */
-    printf("[Tracker] Sampled allocations for %d classes. See %s for details.\n",
-           alloc_table_size, output_path);
+    print_console_report();
     (*jvmti)->RawMonitorExit(jvmti, alloc_lock);
     /* alloc_lock is deliberately NOT destroyed: other threads keep
        allocating (and sampling) while VMDeath runs, and destroying a

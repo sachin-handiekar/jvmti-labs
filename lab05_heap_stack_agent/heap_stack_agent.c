@@ -1,16 +1,20 @@
 /**
- * Lab 05 — Heap and Stack Analysis Agent
+ * Lab 05 — Heap Histogram and Stack Analysis Agent
  *
- * Demonstrates:
- *   - IterateThroughHeap (the modern JVMTI 1.1+ heap API, §5.2)
- *     with jvmtiHeapCallbacks to count objects and bytes
- *   - GetStackTrace for all live threads
- *   - can_tag_objects capability (required by the heap API)
+ * §5.8 "Heap Histogram Agent" example. At VMDeath it:
+ *   - Tags every loaded class with its index (SetTag, §5.3) — the
+ *     can_tag_objects capability is what makes the heap API available
+ *   - Walks the heap once with IterateThroughHeap (§5.2). The JVM passes
+ *     each object's *class* tag to the callback, so the walk can group
+ *     objects by class without any per-object lookups
+ *   - Prints totals and the top 10 classes by bytes — a heap histogram,
+ *     the same view `jmap -histo` gives you
+ *   - Dumps the stacks of the live threads with GetStackTrace, to pair
+ *     "what is on the heap" with "what the threads are doing" (§5.7)
  *
  * Note: the older JVMTI 1.0 functions (IterateOverHeap,
- * IterateOverReachableObjects) are deprecated; they also report once
- * per *reference* rather than per object, which silently miscounts.
- * IterateThroughHeap visits each live object exactly once.
+ * IterateOverReachableObjects) are deprecated; IterateThroughHeap
+ * visits each live object exactly once.
  *
  * Build:
  *   mkdir build && cd build && cmake .. && cmake --build .
@@ -24,9 +28,102 @@
 #include <stdlib.h>
 
 #define LOG_FILE "heap_stack_agent.log"
+#define TOP_N    10
 
 /* ------------------------------------------------------------------ */
-/*  Thread Stack Dumper                                                */
+/*  Heap histogram via class tags + IterateThroughHeap (§5.2, §5.3)    */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    jint   class_count;   /* classes tagged 1..class_count */
+    jlong *objects;       /* per class tag: object count   */
+    jlong *bytes;         /* per class tag: shallow bytes  */
+    jlong  total_objects;
+    jlong  total_bytes;
+} histogram_t;
+
+/* Called once per live object, with every Java thread stopped — keep it
+   fast and don't call JNI or most JVMTI functions here (§5.6). class_tag
+   is the tag of the object's class: our index into the histogram. */
+static jint JNICALL heap_iteration_cb(jlong class_tag, jlong size,
+                                       jlong* tag_ptr, jint length,
+                                       void* user_data) {
+    histogram_t* h = (histogram_t*)user_data;
+    h->total_objects++;
+    h->total_bytes += size;
+    if (class_tag > 0 && class_tag <= h->class_count) {
+        h->objects[class_tag]++;
+        h->bytes[class_tag] += size;
+    }
+    return JVMTI_VISIT_OBJECTS;
+}
+
+static void dump_heap_histogram(jvmtiEnv *jvmti) {
+    char buf[1024];
+    jint class_count = 0;
+    jclass *classes = NULL;
+    jvmtiError err = (*jvmti)->GetLoadedClasses(jvmti, &class_count, &classes);
+    CHECK_JVMTI_ERROR(jvmti, err, "GetLoadedClasses");
+    if (err != JVMTI_ERROR_NONE) return;
+
+    /* Tag class i with i+1 (0 means "untagged") */
+    for (jint i = 0; i < class_count; i++) {
+        (*jvmti)->SetTag(jvmti, classes[i], (jlong)(i + 1));
+    }
+
+    histogram_t h = { class_count, NULL, NULL, 0, 0 };
+    h.objects = calloc((size_t)class_count + 1, sizeof(jlong));
+    h.bytes   = calloc((size_t)class_count + 1, sizeof(jlong));
+    if (!h.objects || !h.bytes) goto done;
+
+    jvmtiHeapCallbacks callbacks;
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.heap_iteration_callback = &heap_iteration_cb;
+
+    jvmti_log(LOG_FILE, "[Heap] Walking the heap...");
+    err = (*jvmti)->IterateThroughHeap(jvmti,
+                                       0,      /* heap_filter: 0 = no filter */
+                                       NULL,   /* klass: NULL = all classes */
+                                       &callbacks,
+                                       &h);    /* user_data -> callback */
+    CHECK_JVMTI_ERROR(jvmti, err, "IterateThroughHeap");
+    if (err != JVMTI_ERROR_NONE) goto done;
+
+    snprintf(buf, sizeof(buf),
+             "[Heap] %lld objects, %lld bytes in %d classes",
+             (long long)h.total_objects, (long long)h.total_bytes,
+             (int)class_count);
+    jvmti_log(LOG_FILE, buf);
+    jvmti_log(LOG_FILE, "[Heap] Top classes by shallow size:");
+    jvmti_log(LOG_FILE, "  rank     objects        bytes  class");
+
+    /* Pick the TOP_N largest by bytes (simple selection; n is small) */
+    for (int rank = 1; rank <= TOP_N; rank++) {
+        jint best = 0;
+        for (jint t = 1; t <= class_count; t++) {
+            if (h.bytes[t] > 0 && (best == 0 || h.bytes[t] > h.bytes[best]))
+                best = t;
+        }
+        if (best == 0) break;
+
+        char *sig = NULL;
+        (*jvmti)->GetClassSignature(jvmti, classes[best - 1], &sig, NULL);
+        snprintf(buf, sizeof(buf), "  %4d  %10lld  %11lld  %s", rank,
+                 (long long)h.objects[best], (long long)h.bytes[best],
+                 sig ? sig : "?");
+        jvmti_log(LOG_FILE, buf);
+        if (sig) (*jvmti)->Deallocate(jvmti, (unsigned char*)sig);
+        h.bytes[best] = -h.bytes[best];   /* mark as printed */
+    }
+
+done:
+    free(h.objects);
+    free(h.bytes);
+    (*jvmti)->Deallocate(jvmti, (unsigned char*)classes);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Thread stacks (§5.7: pair heap data with what threads are doing)   */
 /* ------------------------------------------------------------------ */
 
 static void dump_all_thread_stacks(jvmtiEnv *jvmti) {
@@ -38,8 +135,7 @@ static void dump_all_thread_stacks(jvmtiEnv *jvmti) {
     if (err != JVMTI_ERROR_NONE || !threads) return;
 
     char buf[1024];
-    snprintf(buf, sizeof(buf), "[HeapStack] Dumping stacks for %d threads:",
-             (int)thread_count);
+    snprintf(buf, sizeof(buf), "[Stacks] %d live threads:", (int)thread_count);
     jvmti_log(LOG_FILE, buf);
 
     for (int t = 0; t < thread_count; t++) {
@@ -88,75 +184,14 @@ static void dump_all_thread_stacks(jvmtiEnv *jvmti) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Heap Summary via IterateThroughHeap (§5.2 / §5.8)             */
+/*  VMDeath — run the analysis while the app's data is still around    */
 /* ------------------------------------------------------------------ */
-
-typedef struct {
-    jlong object_count;
-    jlong total_bytes;
-} heap_summary_t;
-
-/* Visits every live object exactly once. Keep callbacks fast — the
-   heap walk blocks all Java threads (§5.6). Returning
-   JVMTI_VISIT_OBJECTS is harmless here (only meaningful for
-   FollowReferences); JVMTI_VISIT_ABORT would stop the iteration. */
-static jint JNICALL heap_iteration_cb(jlong class_tag, jlong size,
-                                       jlong* tag_ptr, jint length,
-                                       void* user_data) {
-    heap_summary_t* summary = (heap_summary_t*)user_data;
-    summary->object_count++;
-    summary->total_bytes += size;
-    return JVMTI_VISIT_OBJECTS;
-}
-
-static void dump_heap_summary(jvmtiEnv *jvmti) {
-    heap_summary_t summary = { 0, 0 };
-
-    jvmtiHeapCallbacks callbacks;
-    memset(&callbacks, 0, sizeof(callbacks));
-    callbacks.heap_iteration_callback = &heap_iteration_cb;
-
-    jvmti_log(LOG_FILE, "[HeapStack] Walking the heap...");
-
-    jvmtiError err = (*jvmti)->IterateThroughHeap(
-        jvmti,
-        0,            /* heap_filter: 0 = no filter */
-        NULL,         /* klass: NULL = all classes */
-        &callbacks,
-        &summary);    /* user_data — passed to callback */
-
-    if (err == JVMTI_ERROR_NONE) {
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "[HeapStack] Heap: %lld objects, %lld bytes total",
-                 (long long)summary.object_count,
-                 (long long)summary.total_bytes);
-        jvmti_log(LOG_FILE, buf);
-        if (summary.object_count > 0) {
-            snprintf(buf, sizeof(buf),
-                     "[HeapStack] Average object size: %lld bytes",
-                     (long long)(summary.total_bytes / summary.object_count));
-            jvmti_log(LOG_FILE, buf);
-        }
-    } else {
-        CHECK_JVMTI_ERROR(jvmti, err, "IterateThroughHeap");
-        jvmti_log(LOG_FILE, "[HeapStack] ERROR: IterateThroughHeap failed");
-    }
-}
-
-/* ------------------------------------------------------------------ */
-/*  VMInit / VMDeath Callbacks — Trigger Analysis                      */
-/* ------------------------------------------------------------------ */
-
-static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
-    jvmti_log(LOG_FILE, "[HeapStack] VMInit — running analysis...");
-    dump_all_thread_stacks(jvmti);
-}
 
 static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
-    dump_heap_summary(jvmti);
+    dump_heap_histogram(jvmti);
     dump_all_thread_stacks(jvmti);
     jvmti_log(LOG_FILE, "[HeapStack] VMDeath — analysis complete.");
+    printf("[Agent] Heap histogram and thread stacks written to %s\n", LOG_FILE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,7 +206,7 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
 
     jvmtiError err;
 
-    /* The heap iteration API requires can_tag_objects */
+    /* The heap iteration and tagging APIs require can_tag_objects */
     jvmtiCapabilities caps;
     memset(&caps, 0, sizeof(caps));
     caps.can_tag_objects = 1;
@@ -179,19 +214,13 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
     CHECK_JVMTI_ERROR(jvmti, err, "AddCapabilities");
     if (err != JVMTI_ERROR_NONE) return JNI_ERR;
 
-    /* Register callbacks */
     jvmtiEventCallbacks callbacks;
     memset(&callbacks, 0, sizeof(callbacks));
-    callbacks.VMInit  = &cbVMInit;
     callbacks.VMDeath = &cbVMDeath;
     err = (*jvmti)->SetEventCallbacks(jvmti, &callbacks, sizeof(callbacks));
     CHECK_JVMTI_ERROR(jvmti, err, "SetEventCallbacks");
     if (err != JVMTI_ERROR_NONE) return JNI_ERR;
 
-    /* Enable events */
-    err = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
-              JVMTI_EVENT_VM_INIT, NULL);
-    CHECK_JVMTI_ERROR(jvmti, err, "Enable VMInit");
     err = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
               JVMTI_EVENT_VM_DEATH, NULL);
     CHECK_JVMTI_ERROR(jvmti, err, "Enable VMDeath");

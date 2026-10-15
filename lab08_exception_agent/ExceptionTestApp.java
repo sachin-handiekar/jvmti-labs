@@ -1,7 +1,8 @@
 /**
  * ExceptionTestApp.java — Companion test app for Lab 08.
  *
- * Throws various exceptions (caught and uncaught) to exercise the agent.
+ * Throws various exceptions — caught, wrapped, thrown inside the JDK,
+ * and one uncaught on its own thread — to exercise the agent.
  */
 @SuppressWarnings("unused")
 public class ExceptionTestApp {
@@ -36,6 +37,17 @@ public class ExceptionTestApp {
         } catch (NullPointerException e) {
             System.out.println("  Caught: NullPointerException");
         }
+
+        // Test 5: uncaught exception (on its own thread). No handler exists
+        // anywhere on that thread's stack, so the agent reports UNCAUGHT
+        // (catch_method == NULL). The thread dies with the default stack
+        // trace on stderr, but main — and the JVM — carry on.
+        Thread doomed = new Thread(() -> {
+            int[] arr = new int[3];
+            arr[10] = 42;  // ArrayIndexOutOfBoundsException
+        }, "Doomed");
+        doomed.start();
+        try { doomed.join(); } catch (InterruptedException e) { }
 
         System.out.println("ExceptionTestApp: Done. Check exception_agent.log.");
     }

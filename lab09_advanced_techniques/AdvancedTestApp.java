@@ -33,9 +33,9 @@ public class AdvancedTestApp {
     public static void main(String[] args) throws Exception {
         System.out.println("AdvancedTestApp: Starting worker threads...");
 
-        Thread t1 = new Thread(new Worker("Worker-A", 500));
-        Thread t2 = new Thread(new Worker("Worker-B", 500));
-        Thread t3 = new Thread(new Worker("Worker-C", 500));
+        Thread t1 = new Thread(new Worker("Worker-A", 500), "Worker-A");
+        Thread t2 = new Thread(new Worker("Worker-B", 500), "Worker-B");
+        Thread t3 = new Thread(new Worker("Worker-C", 500), "Worker-C");
 
         t1.start();
         t2.start();

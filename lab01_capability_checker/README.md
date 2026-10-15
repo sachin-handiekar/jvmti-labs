@@ -1,5 +1,7 @@
 # Capability Checker JVMTI Agent
 
+> **Book:** companion to [Chapter 1: Introduction to JVMTI](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter1.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 This JVMTI agent prints a greeting message on load and lists a representative set of
 the potential capabilities supported by the current JVM (via `GetPotentialCapabilities`).
 See the official JVMTI documentation for the full capabilities reference.

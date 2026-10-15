@@ -1,5 +1,7 @@
 # Lab 13 — Case Study: Allocation Tracker Agent
 
+> **Book:** companion to [Chapter 13: Case Study — Building an Allocation Tracker](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter13.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A complete JVMTI agent that samples object allocations and produces a JSON report.
 
 ## Features
@@ -47,7 +49,19 @@ AllocTestApp started
   Created 1000 byte arrays (8KB each)
   Created HashMap with 10000 entries
 AllocTestApp finished
-[Tracker] Sampled allocations for 8 classes. See alloc_report.json for details.
+
+[Tracker] === Allocation Report (sampled) ===
+[Tracker] Classes seen:         7
+[Tracker] Sampled allocations:  226
+[Tracker] Sampled bytes:        2218096
+[Tracker] Top allocators (by samples):
+  1. [B — 172 samples, 953920 bytes
+  2. Ljava/lang/String; — 38 samples, 912 bytes
+  3. [Ljava/lang/Object; — 7 samples, 1205712 bytes
+  4. Ljava/util/HashMap$Node; — 4 samples, 128 bytes
+  5. [Ljava/util/HashMap$Node; — 2 samples, 40992 bytes
+[Tracker] Full report: alloc_report.json
+[Tracker] ============================
 ```
 
 `alloc_report.json` (excerpt — numbers vary run to run):

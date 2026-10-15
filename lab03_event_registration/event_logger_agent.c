@@ -26,11 +26,16 @@
 
 static long method_count = 0;
 
+/* Opened once in Agent_OnLoad and kept open. ThreadStart/ThreadEnd fire
+   concurrently on many threads; stdio streams lock internally, so each
+   fprintf lands as a whole line. Reopening the file for every message
+   would lose lines when threads race. */
+static FILE* log_fp = NULL;
+
 static void log_event(const char* msg) {
-    FILE* fp = fopen("event_logger_agent.log", "a");
-    if (fp) {
-        fprintf(fp, "%s\n", msg);
-        fclose(fp);
+    if (log_fp) {
+        fprintf(log_fp, "%s\n", msg);
+        fflush(log_fp);
     }
 }
 
@@ -88,6 +93,13 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
     jint res = (*vm)->GetEnv(vm, (void **)&jvmti, JVMTI_VERSION_1_2);
     if (res != JNI_OK || jvmti == NULL) {
         printf("[JVMTI] Unable to access JVMTI!\n");
+        return JNI_ERR;
+    }
+
+    /* Open the log before enabling any event that writes to it */
+    log_fp = fopen("event_logger_agent.log", "w");
+    if (log_fp == NULL) {
+        printf("[JVMTI] Unable to open event_logger_agent.log\n");
         return JNI_ERR;
     }
 
