@@ -1,22 +1,23 @@
 # Lab 6 — Class Transformation and Bytecode Instrumentation
 
-Demonstrates how to use the **ClassFileLoadHook** event to intercept class loading and
-potentially transform (instrument) class bytecode before it is loaded into the JVM.
+A class-load monitor (§6.7) built on the **ClassFileLoadHook** event, which the JVM calls
+with the raw class-file bytes of every class *before* it is defined — the same hook every
+bytecode-instrumentation agent uses.
 
 ## Key Concepts
 
-- Requesting `can_retransform_classes` and `can_generate_all_class_hook_events` capabilities
-- Registering a `ClassFileLoadHook` callback
-- Filtering by class name to target specific classes (never transform `java/*`, `jdk/*`,
-  or `sun/*` classes — see §6.3 safety rule)
-- Placeholder for bytecode transformation (e.g., injecting logging via ASM — §6.5)
+- Registering a `ClassFileLoadHook` callback (no capability needed for load-time hooking)
+- Requesting `can_generate_all_class_hook_events` so the hook also sees early-loaded classes
+- Filtering out `java/*`, `jdk/*` and `sun/*` classes (§6.3 — never transform these)
+- Guarding shared counters with a raw monitor, since classes load concurrently
+- Printing a class-count / bytecode-size summary at `VMDeath`
 
 ## Files
 
 | File | Description |
 |------|-------------|
 | `class_transform_agent.c` | The JVMTI agent (C shared library) |
-| `TargetClass.java` | Sample Java class targeted for transformation (runnable) |
+| `TransformTestApp.java` | Companion test app from §6.7 (loads a few nested classes) |
 | `CMakeLists.txt` | Build configuration |
 
 ## Build
@@ -29,11 +30,8 @@ cmake --build build
 ## Run
 
 ```sh
-# Compile the target class
-javac -d . TargetClass.java
-
-# Run with the agent loaded
-java -agentpath:./build/libclass_transform_agent.so -cp . com.example.TargetClass
+javac TransformTestApp.java
+java -agentpath:./build/libclass_transform_agent.so TransformTestApp
 ```
 
 (On Windows use `build\class_transform_agent.dll`, on macOS the `.dylib`.)
@@ -41,17 +39,26 @@ java -agentpath:./build/libclass_transform_agent.so -cp . com.example.TargetClas
 ## Expected Output
 
 ```
-[JVMTI] Class transform agent loaded and ClassFileLoadHook registered.
-[JVMTI] Detected loading of target class: com/example/TargetClass
-TargetClass started
-Original foo
-Original bar
-TargetClass finished
+[Agent] Class load monitor agent loaded (Lab 06)
+[Agent] Loading: TransformTestApp                                   ( 1207 bytes)
+TransformTestApp started
+[Agent] Loading: TransformTestApp$Greeter                           (  260 bytes)
+[Agent] Loading: TransformTestApp$FormalGreeter                     (  845 bytes)
+[Agent] Loading: TransformTestApp$CasualGreeter                     (  840 bytes)
+Good day, World
+Hey World!
+TransformTestApp finished
+
+[Agent] === Class Loading Summary ===
+[Agent] Total classes loaded: 251
+[Agent] Total bytecode size:  1345397 bytes
 ```
+
+Byte sizes and totals vary by JDK version and vendor.
 
 ## Notes
 
-This example **logs** when the target class is loaded but does not modify the bytecode.
+This example **observes** class loading but does not modify any bytecode.
 To actually instrument it, you would:
 
 1. Use a bytecode library (e.g., [ASM](https://asm.ow2.io/)) to inject instrumentation

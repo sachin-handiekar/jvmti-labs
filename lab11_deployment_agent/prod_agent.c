@@ -11,7 +11,7 @@
  *     time (GetPotentialCapabilities)
  *
  * Load at startup:
- *   java -agentpath:./build/libprod_agent.so=package=com/example,method_entry HelloService
+ *   java -agentpath:./build/libprod_agent.so=package=com/example,method_entry \n *        -cp . com.example.DeployTestApp
  *
  * Attach to a running JVM (Java 9+):
  *   jcmd <pid> JVMTI.agent_load /abs/path/libprod_agent.so thread_events
@@ -121,7 +121,10 @@ static void log_method_event(jvmtiEnv* jvmti, jmethodID method,
                                      &class_sig, NULL) != JVMTI_ERROR_NONE)
         return;
 
-    if (class_sig[0] == 'L' && strstr(class_sig, monitored_package)) {
+    /* Prefix match on the class name ("Lcom/example/Foo;" → "com/example/Foo"),
+       so package=com/example doesn't also match org/acme/com/example/... */
+    if (class_sig[0] == 'L' &&
+        strncmp(class_sig + 1, monitored_package, strlen(monitored_package)) == 0) {
         char* method_name = NULL;
         char* method_sig = NULL;
         if ((*jvmti)->GetMethodName(jvmti, method, &method_name,

@@ -2,15 +2,15 @@
 
 A JVMTI agent runs as **native code inside the JVM process** — a single null pointer
 dereference crashes the entire application. This example demonstrates the defensive
-patterns from Lab 12 that separate prototype agents from production-ready ones.
+patterns from Chapter 12 that separate prototype agents from production-ready ones.
 
 ## What It Demonstrates
 
 | Pattern | Where |
 |---------|-------|
 | **Defensive capability check** — `GetPotentialCapabilities` + graceful degradation when a feature is unavailable | `Agent_OnLoad` |
-| **Safe shutdown** — `shutting_down` flag, disable events *before* cleanup, destroy raw monitors last | `cbVMDeath` |
-| **Crash-handler chaining** — save and delegate to the JVM's SIGSEGV handler (POSIX) / return `EXCEPTION_CONTINUE_SEARCH` (Windows SEH) | `install_crash_handlers`, called from `VMInit` |
+| **Safe shutdown** — `shutting_down` flag, disable events *before* cleanup, and *don't* destroy raw monitors that in-flight callbacks may still enter | `cbVMDeath` |
+| **Crash-handler chaining** — save and silently delegate to the JVM's SIGSEGV handler, keeping its flags and mask (POSIX) / chain to the previous unhandled-exception filter (Windows) | `install_crash_handlers`, called from `VMInit` |
 
 > **Why chaining matters:** HotSpot *deliberately* triggers SIGSEGV during normal
 > operation — implicit null checks in JIT-compiled code and safepoint polling both rely
@@ -47,8 +47,12 @@ java -agentpath:./build/libstability_agent.so StabilityTestApp
 StabilityTestApp started
 StabilityTestApp handled 10 exceptions
 StabilityTestApp finished
-[Stability] VMDeath — NN exceptions observed.
+[Stability] VMDeath — 10 exceptions observed.
+[Stability] SIGSEGVs chained to the JVM's handler: N
 ```
 
-(`NN` is larger than 10 — the JDK itself throws and catches exceptions internally
-during class loading. Lab 8 covers filtering.)
+- The exception count can exceed 10 on some JDK versions, which throw and catch exceptions
+  internally during startup (Lab 8 covers filtering).
+- The SIGSEGV line appears on Linux/macOS only. `N` is often non-zero on a perfectly
+  healthy run: each one is a fault the JVM deliberately triggered and recovered from. That
+  is exactly why the handler must chain silently instead of logging or exiting.

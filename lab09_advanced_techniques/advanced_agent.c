@@ -142,11 +142,10 @@ static void JNICALL cbThreadEnd(jvmtiEnv* jvmti, JNIEnv* jni,
 static void JNICALL cbVMDeath(jvmtiEnv* jvmti, JNIEnv* jni) {
     jvmti_log(LOG_FILE, "[Agent] VMDeath — agent shutting down.");
 
-    /* Destroy the raw monitor last (§9.7 best practices) */
-    if (agent_lock) {
-        (*jvmti)->DestroyRawMonitor(jvmti, agent_lock);
-        agent_lock = NULL;
-    }
+    /* agent_lock is deliberately NOT destroyed: daemon threads keep
+       firing MethodEntry while the VM shuts down, and destroying a
+       monitor they may still enter is a use-after-free (§9.1, §9.7).
+       The OS reclaims it when the process exits. */
 }
 
 /* ------------------------------------------------------------------ */

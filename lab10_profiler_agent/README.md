@@ -13,9 +13,13 @@ JProfiler, and YourKit.
 ## How It Works
 
 1. `VMInit` creates a `java.lang.Thread` via JNI and starts it with `RunAgentThread`
-2. The sampling loop calls `GetAllThreads` + `GetStackTrace` every 10ms
+2. Every 10ms (a timed `RawMonitorWait`) the sampling loop calls `GetAllThreads` and
+   samples only threads running Java code: `RUNNABLE`, not `IN_NATIVE`, and not parked in
+   a native method. Without this, idle JDK threads (Reference Handler, Finalizer,
+   Common-Cleaner) dominate the profile
 3. Stacks are collapsed bottom-up into `frame;frame;frame` keys and counted
-4. `VMDeath` writes `profiler_output.txt` in flamegraph "collapsed" format
+4. `VMDeath` stops the sampler and waits for it to finish (`RawMonitorNotifyAll`
+   handshake), then writes `profiler_output.txt` in flamegraph "collapsed" format
 
 ## Building
 

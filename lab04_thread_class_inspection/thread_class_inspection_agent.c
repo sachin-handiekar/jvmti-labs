@@ -1,10 +1,13 @@
 /**
  * Lab 04 — Thread, Stack, and Method Inspection Agent
  *
- * Produces a Java-style thread dump at VMInit (§4.5):
+ * Produces a Java-style thread dump at VMDeath (§4.5) — at VMInit the
+ * application hasn't started, but at VMDeath its daemon threads are
+ * still alive, frozen in whatever state they were in:
  *   - GetAllThreads / GetThreadInfo for thread enumeration and metadata
- *   - GetThreadState with correct flag ordering (SLEEPING is a sub-state
- *     of WAITING, so the more specific flag is tested first)
+ *   - GetThreadState with correct flag ordering: every waiting thread
+ *     has WAITING set, so WAITING_WITH_TIMEOUT (Java's TIMED_WAITING —
+ *     sleep, wait(ms), parkNanos) is tested first
  *   - GetStackTrace + GetMethodName / GetMethodDeclaringClass /
  *     GetClassSignature to resolve each frame
  *   - GetLineNumberTable (capability: can_get_line_numbers) to map
@@ -16,8 +19,8 @@
  *   mkdir build && cd build && cmake .. && cmake --build .
  *
  * Run:
- *   javac -g InspectionTestApp.java     # -g enables line numbers
- *   java -agentpath:./build/libthread_class_inspection_agent.so InspectionTestApp
+ *   javac -g StackTestApp.java     # -g enables line numbers
+ *   java -agentpath:./build/libthread_class_inspection_agent.so StackTestApp
  */
 
 #include "jvmti_utils.h"
@@ -33,8 +36,9 @@
 static const char* thread_state_name(jint state) {
     if (state & JVMTI_THREAD_STATE_RUNNABLE) return "RUNNABLE";
     if (state & JVMTI_THREAD_STATE_BLOCKED_ON_MONITOR_ENTER) return "BLOCKED";
-    /* SLEEPING implies WAITING — test the specific flag first (§4.1) */
-    if (state & JVMTI_THREAD_STATE_SLEEPING) return "TIMED_WAITING";
+    /* Every waiting thread has WAITING set — test the more specific
+       WAITING_WITH_TIMEOUT first (sleep, wait(ms), parkNanos) (§4.1) */
+    if (state & JVMTI_THREAD_STATE_WAITING_WITH_TIMEOUT) return "TIMED_WAITING";
     if (state & JVMTI_THREAD_STATE_WAITING) return "WAITING";
     return "UNKNOWN";
 }
@@ -48,7 +52,8 @@ static void dump_thread_stack(jvmtiEnv *jvmti, jthread thread) {
     if (err != JVMTI_ERROR_NONE) return;
 
     jint state = 0;
-    (*jvmti)->GetThreadState(jvmti, thread, &state);
+    if ((*jvmti)->GetThreadState(jvmti, thread, &state) != JVMTI_ERROR_NONE)
+        state = 0;   /* reported as UNKNOWN */
 
     snprintf(buf, sizeof(buf), "\"%s\" %s priority=%d daemon=%s",
              tinfo.name ? tinfo.name : "<unnamed>",
@@ -158,8 +163,12 @@ static void log_loaded_class_count(jvmtiEnv *jvmti) {
 /* ------------------------------------------------------------------ */
 
 static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
-    jvmti_log(LOG_FILE, "[Inspect] VMInit — dumping threads...");
     log_loaded_class_count(jvmti);
+}
+
+/* Dump at VMDeath: the app's daemon threads are still alive here */
+static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
+    jvmti_log(LOG_FILE, "[Inspect] VMDeath — dumping threads...");
     dump_all_threads(jvmti);
 }
 
@@ -176,10 +185,11 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
     jvmtiError err = (*jvmti)->AddCapabilities(jvmti, &caps);
     CHECK_JVMTI_ERROR(jvmti, err, "AddCapabilities");
 
-    /* Register VMInit callback — dump threads once the JVM is ready */
+    /* VMInit logs the class count; VMDeath dumps the threads */
     jvmtiEventCallbacks callbacks;
     memset(&callbacks, 0, sizeof(callbacks));
-    callbacks.VMInit = &cbVMInit;
+    callbacks.VMInit  = &cbVMInit;
+    callbacks.VMDeath = &cbVMDeath;
     err = (*jvmti)->SetEventCallbacks(jvmti, &callbacks, sizeof(callbacks));
     CHECK_JVMTI_ERROR(jvmti, err, "SetEventCallbacks");
     if (err != JVMTI_ERROR_NONE) return JNI_ERR;
@@ -187,6 +197,9 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
     err = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
               JVMTI_EVENT_VM_INIT, NULL);
     CHECK_JVMTI_ERROR(jvmti, err, "Enable VMInit");
+    err = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
+              JVMTI_EVENT_VM_DEATH, NULL);
+    CHECK_JVMTI_ERROR(jvmti, err, "Enable VMDeath");
 
     printf("[Agent] Thread dump agent ready — output in %s\n", LOG_FILE);
     return JNI_OK;

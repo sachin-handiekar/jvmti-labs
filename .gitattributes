@@ -1,0 +1,2 @@
+# Shell scripts must keep LF endings to run on Linux CI and in Git Bash
+*.sh text eol=lf

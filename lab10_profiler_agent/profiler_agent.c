@@ -27,16 +27,11 @@
 #include "jvmti_utils.h"
 #include <stdlib.h>
 
-#ifdef _WIN32
-#include <windows.h>   /* Sleep() */
-#else
-#include <time.h>      /* nanosleep() */
-#endif
-
 /* ── Configuration ── */
 #define MAX_FRAMES     64
 #define MAX_SAMPLES    10000
 #define SAMPLE_KEY_LEN 2048
+#define INTERVAL_MS    10
 
 /* ── Sample storage ── */
 typedef struct {
@@ -46,17 +41,12 @@ typedef struct {
 
 static StackSample samples[MAX_SAMPLES];
 static int sample_count = 0;
+/* profiler_lock guards samples[] AND the two flags below; it also
+   paces the sampler (RawMonitorWait with a timeout) and lets VMDeath
+   wait for the sampler to finish (RawMonitorNotifyAll). */
 static jrawMonitorID profiler_lock;
-static volatile int profiling_active = 0;
-
-static void sleep_ms(int ms) {
-#ifdef _WIN32
-    Sleep(ms);
-#else
-    struct timespec ts = { ms / 1000, (ms % 1000) * 1000000L };
-    nanosleep(&ts, NULL);
-#endif
-}
+static int profiling_active = 0;
+static int sampler_running  = 0;
 
 /* ── Record or increment a stack sample ── */
 static void record_sample(const char *key) {
@@ -68,8 +58,8 @@ static void record_sample(const char *key) {
         }
     }
     if (sample_count < MAX_SAMPLES) {
-        strncpy(samples[sample_count].key, key, SAMPLE_KEY_LEN - 1);
-        samples[sample_count].key[SAMPLE_KEY_LEN - 1] = '\0';
+        /* snprintf always NUL-terminates (strncpy may not) */
+        snprintf(samples[sample_count].key, SAMPLE_KEY_LEN, "%s", key);
         samples[sample_count].count = 1;
         sample_count++;
     }
@@ -80,9 +70,27 @@ static void sample_one_thread(jvmtiEnv *jvmti, jthread thread) {
     jvmtiFrameInfo frames[MAX_FRAMES];
     jint frame_count;
 
+    /* A CPU profiler only cares about threads running Java code.
+       Without this filter, idle JDK threads (Reference Handler,
+       Finalizer, Common-Cleaner...) are sampled at every tick and
+       dominate the flamegraph. Threads blocked in native calls report
+       RUNNABLE too, so exclude IN_NATIVE as well. */
+    jint state = 0;
+    if ((*jvmti)->GetThreadState(jvmti, thread, &state) != JVMTI_ERROR_NONE)
+        return;
+    if (!(state & JVMTI_THREAD_STATE_RUNNABLE) ||
+        (state & JVMTI_THREAD_STATE_IN_NATIVE))
+        return;
+
     jvmtiError err = (*jvmti)->GetStackTrace(jvmti, thread, 0,
                                               MAX_FRAMES, frames, &frame_count);
     if (err != JVMTI_ERROR_NONE || frame_count == 0) return;
+
+    /* A native top frame (location == -1) means the thread is parked
+       inside the VM or OS — e.g. Reference Handler blocks in a native
+       method yet still reports RUNNABLE without IN_NATIVE. Not CPU
+       time spent in Java code, so drop the sample. */
+    if (frames[0].location == -1) return;
 
     /* Build the collapsed stack key (bottom → top) */
     char key[SAMPLE_KEY_LEN];
@@ -145,7 +153,12 @@ static void sample_one_thread(jvmtiEnv *jvmti, jthread thread) {
 static void JNICALL sample_thread_func(jvmtiEnv *jvmti, JNIEnv *jni, void *arg) {
     printf("[Profiler] Sampling thread started\n");
 
+    (*jvmti)->RawMonitorEnter(jvmti, profiler_lock);
+    sampler_running = 1;
     while (profiling_active) {
+        /* Don't hold the lock while walking stacks */
+        (*jvmti)->RawMonitorExit(jvmti, profiler_lock);
+
         jthread *threads = NULL;
         jint thread_count;
 
@@ -157,8 +170,15 @@ static void JNICALL sample_thread_func(jvmtiEnv *jvmti, JNIEnv *jni, void *arg) 
             (*jvmti)->Deallocate(jvmti, (unsigned char*)threads);
         }
 
-        sleep_ms(10);   /* ~10ms between samples */
+        /* Wait ~10ms between samples. A timed RawMonitorWait doubles
+           as a portable sleep — and VMDeath can cut it short. */
+        (*jvmti)->RawMonitorEnter(jvmti, profiler_lock);
+        if (profiling_active)
+            (*jvmti)->RawMonitorWait(jvmti, profiler_lock, INTERVAL_MS);
     }
+    sampler_running = 0;
+    (*jvmti)->RawMonitorNotifyAll(jvmti, profiler_lock);  /* wake VMDeath */
+    (*jvmti)->RawMonitorExit(jvmti, profiler_lock);
     printf("[Profiler] Sampling thread stopped\n");
 }
 
@@ -198,14 +218,22 @@ static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
 }
 
 static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
-    profiling_active = 0;
-    sleep_ms(50);   /* give the sampling thread time to stop */
-
     (*jvmti)->RawMonitorEnter(jvmti, profiler_lock);
+
+    /* Signal the sampler to stop and WAIT until it has — a fixed
+       sleep() races with a sampler that is mid-way through a slow
+       stack walk. The 1s timeout guards against a sampler that
+       never started or is stuck. */
+    profiling_active = 0;
+    (*jvmti)->RawMonitorNotifyAll(jvmti, profiler_lock);
+    for (int waited = 0; sampler_running && waited < 1000; waited += 100)
+        (*jvmti)->RawMonitorWait(jvmti, profiler_lock, 100);
+
     write_output();
     (*jvmti)->RawMonitorExit(jvmti, profiler_lock);
-
-    (*jvmti)->DestroyRawMonitor(jvmti, profiler_lock);
+    /* profiler_lock is deliberately NOT destroyed: daemon threads
+       keep running through VMDeath, and destroying a monitor another
+       thread may still touch is a use-after-free. The OS reclaims it. */
 }
 
 /* ── Agent entry point ── */

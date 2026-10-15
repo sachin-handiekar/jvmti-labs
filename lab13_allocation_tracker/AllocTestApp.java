@@ -1,45 +1,41 @@
-/**
- * AllocTestApp.java — Companion test application for Lab 13 Case Study.
- *
- * Creates various objects to exercise the allocation tracker agent.
- */
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class AllocTestApp {
 
-    public static void main(String[] args) {
-        System.out.println("AllocTestApp: Starting allocation-heavy workload...");
-
-        // Create many Strings
+    /* Generate many small objects */
+    static void smallAllocations() {
         List<String> strings = new ArrayList<>();
-        for (int i = 0; i < 1000; i++) {
-            strings.add("String-" + i);
+        for (int i = 0; i < 100_000; i++) {
+            strings.add("item-" + i);
         }
+        System.out.println("  Created " + strings.size() + " strings");
+    }
 
-        // Create many boxed Integers
-        List<Integer> ints = new ArrayList<>();
-        for (int i = 0; i < 500; i++) {
-            ints.add(Integer.valueOf(i));
+    /* Generate fewer large objects */
+    static void largeAllocations() {
+        List<byte[]> buffers = new ArrayList<>();
+        for (int i = 0; i < 1_000; i++) {
+            buffers.add(new byte[8192]);
         }
+        System.out.println("  Created " + buffers.size() + " byte arrays (8KB each)");
+    }
 
-        // Create some maps
-        Map<String, Integer> map = new HashMap<>();
-        for (int i = 0; i < 200; i++) {
-            map.put("key-" + i, i);
+    /* Generate diverse object types */
+    static void diverseAllocations() {
+        Map<Integer, String> map = new HashMap<>();
+        for (int i = 0; i < 10_000; i++) {
+            map.put(i, "value-" + i);
         }
+        System.out.println("  Created HashMap with " + map.size() + " entries");
+    }
 
-        // Create a few custom objects
-        for (int i = 0; i < 100; i++) {
-            Object[] arr = new Object[10];
-            arr[0] = new StringBuilder("item-" + i);
-        }
+    public static void main(String[] args) {
+        System.out.println("AllocTestApp started");
 
-        System.out.println("AllocTestApp: Created " + strings.size()
-                + " strings, " + ints.size() + " integers, "
-                + map.size() + " map entries.");
-        System.out.println("AllocTestApp: Done. Check allocations.json.");
+        smallAllocations();
+        largeAllocations();
+        diverseAllocations();
+
+        System.out.println("AllocTestApp finished");
     }
 }

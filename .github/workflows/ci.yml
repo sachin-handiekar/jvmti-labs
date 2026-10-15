@@ -5,15 +5,19 @@ on:
     paths:
       - '**.c'
       - '**.h'
+      - '**.java'
       - '**CMakeLists.txt'
       - 'cmake/**'
+      - 'ci/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - '**.c'
       - '**.h'
+      - '**.java'
       - '**CMakeLists.txt'
       - 'cmake/**'
+      - 'ci/**'
       - '.github/workflows/ci.yml'
 
 jobs:
@@ -21,6 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        java: ['17', '21', '25']
         project:
           - lab01_capability_checker
           - lab02_basic_agent
@@ -37,52 +42,33 @@ jobs:
           - lab13_allocation_tracker
 
     runs-on: ubuntu-latest
-    name: ${{ matrix.project }}
+    name: ${{ matrix.project }} (JDK ${{ matrix.java }})
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: ${{ matrix.java }}
           distribution: 'temurin'
 
       - name: Configure CMake
         working-directory: ${{ matrix.project }}
-        run: cmake -S . -B build
+        run: cmake -S . -B build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
 
       - name: Build agent
         working-directory: ${{ matrix.project }}
         run: cmake --build build --config Release
 
-      - name: Compile Java helpers (if any)
-        working-directory: ${{ matrix.project }}
-        shell: bash
-        run: |
-          shopt -s nullglob
-          java_files=(*.java)
-          if [ ${#java_files[@]} -gt 0 ]; then
-            echo "Compiling ${java_files[*]}"
-            javac "${java_files[@]}"
-          else
-            echo "No Java files to compile"
-          fi
-
-      - name: Smoke test — load agent into JVM
-        working-directory: ${{ matrix.project }}
-        shell: bash
-        run: |
-          AGENT_LIB=$(find build -name "*.so" -o -name "*.dylib" | head -1)
-          if [ -n "$AGENT_LIB" ]; then
-            echo "Loading agent: $AGENT_LIB"
-            java -agentpath:"$(realpath "$AGENT_LIB")" -version 2>&1 || true
-          else
-            echo "No shared library found — skipping smoke test"
-          fi
+      # Runs the lab's test app with the agent loaded and checks the
+      # agent's output for the behaviour the lab demonstrates
+      - name: Run test app and verify output
+        run: bash ci/run_lab.sh ${{ matrix.project }}
 
       - name: Upload build artifacts
+        if: matrix.java == '21'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.project }}-ubuntu

@@ -43,6 +43,27 @@ static int is_jdk_class(const char* class_sig) {
            strncmp(class_sig, "Lcom/sun/", 9) == 0;
 }
 
+/* Does this exception involve application code? Thrown in it, caught
+   in it, or uncaught (about to kill a thread). Filtering on the throw
+   site alone would hide e.g. the NumberFormatException that
+   Integer.parseInt() throws and the application catches. */
+static int is_relevant(jvmtiEnv *jvmti, const char *throw_class,
+                       jmethodID catch_method) {
+    if (!is_jdk_class(throw_class) || catch_method == NULL) return 1;
+
+    int relevant = 0;
+    jclass catch_class;
+    char *catch_sig = NULL;
+    if ((*jvmti)->GetMethodDeclaringClass(jvmti, catch_method,
+                                           &catch_class) == JVMTI_ERROR_NONE &&
+        (*jvmti)->GetClassSignature(jvmti, catch_class,
+                                     &catch_sig, NULL) == JVMTI_ERROR_NONE) {
+        relevant = !is_jdk_class(catch_sig);
+        (*jvmti)->Deallocate(jvmti, (unsigned char*)catch_sig);
+    }
+    return relevant;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Event Callbacks                                                    */
 /* ------------------------------------------------------------------ */
@@ -65,8 +86,8 @@ static void JNICALL cbException(jvmtiEnv *jvmti, JNIEnv *jni,
         (*jvmti)->GetClassSignature(jvmti, decl_class, &throw_class, NULL);
     }
 
-    /* Filter: only log exceptions thrown from application code (§8.6) */
-    if (is_jdk_class(throw_class)) {
+    /* Filter: only log exceptions that involve application code (§8.6) */
+    if (!is_relevant(jvmti, throw_class, catch_method)) {
         if (throw_class)
             (*jvmti)->Deallocate(jvmti, (unsigned char*)throw_class);
         return;
