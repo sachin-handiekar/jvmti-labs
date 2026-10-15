@@ -31,6 +31,7 @@ jobs:
           - lab02_basic_agent
           - lab03_event_registration
           - lab04_thread_class_inspection
+          - lab04b_virtual_threads
           - lab05_heap_stack_agent
           - lab06_class_transform_agent
           - lab06b_class_patcher
@@ -41,6 +42,10 @@ jobs:
           - lab11_deployment_agent
           - lab12_stability_agent
           - lab13_allocation_tracker
+        # Virtual threads and their JVMTI API need JDK 21+
+        exclude:
+          - java: '17'
+            project: lab04b_virtual_threads
 
     runs-on: ubuntu-latest
     name: ${{ matrix.project }} (JDK ${{ matrix.java }})
