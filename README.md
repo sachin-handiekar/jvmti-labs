@@ -14,6 +14,7 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 | 4   | lab04_thread_class_inspection       | Thread dump: states (incl. TIMED_WAITING vs WAITING), stack walking, line numbers |
 | 5   | lab05_heap_stack_agent              | Heap walking with IterateThroughHeap, stack analysis       |
 | 6   | lab06_class_transform_agent         | Class load monitor built on ClassFileLoadHook              |
+| 6b  | lab06b_class_patcher                | Bytecode rewriting: patch a class at load time, or retransform it in a running JVM |
 | 7   | lab07_jvm_runtime_agent             | GC events with GetTime, system properties, object sizing   |
 | 8   | lab08_exception_agent               | Exception/ExceptionCatch callbacks, filtering, stack traces |
 | 9   | lab09_advanced_techniques           | Raw monitors, TLS, reentrancy guards, thread-safe logging  |
@@ -73,6 +74,7 @@ See the `README.md` in each lab directory for specific instructions.
 - **Thread/Class Inspection** -- Java-style thread dump with states, stack frames, and source lines
 - **Heap/Stack Analysis** -- walks the heap with the modern `IterateThroughHeap` API, dumps thread stacks
 - **Class Load Monitor** -- sees every class's bytecode via ClassFileLoadHook, with JDK filtering and a load summary
+- **Class Patcher** -- rewrites a string literal in a class's constant pool, at load time or via `RetransformClasses` after attach
 - **JVM Runtime** -- times GC events with `GetTime`, reads system properties
 - **Exception Handling** -- captures exceptions with throw/catch locations, JDK filtering, and safe JNI use
 - **Advanced Techniques** -- raw monitors, Thread-Local Storage, reentrancy guards

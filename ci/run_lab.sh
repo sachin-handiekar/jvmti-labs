@@ -112,6 +112,34 @@ lab06_class_transform_agent)
     reject out.txt 'Loading: java/'
     expect out.txt 'Total classes loaded: [1-9][0-9]*'
     ;;
+lab06b_class_patcher)
+    # 1. Load time: the class is patched as it loads
+    run "" PatchTestApp
+    expect out.txt '^\[Patcher\] Patched PatchTestApp: '
+    expect out.txt '^  \[1\] Hello from JVMTI: this class was patched in memory$'
+    reject out.txt '^  \[1\] Hello from the original class file$'
+
+    # 2. Attach + RetransformClasses: output changes mid-run
+    mkdir attach && cd attach
+    java -XX:+IgnoreUnrecognizedVMOptions -XX:+EnableDynamicAgentLoading \
+         -cp .. PatchTestApp --loop 12 > app.txt 2>&1 &
+    APP=$!
+    PID=""
+    for _ in $(seq 1 60); do
+        PID=$(jps -l | awk '$2 == "PatchTestApp" {print $1}')
+        [ -n "$PID" ] && break
+        sleep 0.25
+    done
+    [ -n "$PID" ] || { echo "FAIL: PatchTestApp did not start"; cat app.txt; exit 1; }
+    sleep 1.5   # let a few unpatched lines print first
+    echo "+ java AgentLoader $PID <agent>"
+    java -cp .. AgentLoader "$PID" "$AGENT"
+    wait $APP
+    cat app.txt
+    expect app.txt '^  \[1\] Hello from the original class file$'
+    expect app.txt '^\[Patcher\] Retransformed PatchTestApp: '
+    expect app.txt '^  \[12\] Hello from JVMTI: this class was patched in memory$'
+    ;;
 lab07_jvm_runtime_agent)
     run "" RuntimeTestApp
     expect out.txt '^\[GC\] [1-9][0-9]* collections'
