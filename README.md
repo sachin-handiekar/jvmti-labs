@@ -18,6 +18,7 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 | 6b  | lab06b_class_patcher                | Bytecode rewriting: patch a class at load time, or retransform it in a running JVM |
 | 7   | lab07_jvm_runtime_agent             | GC events with GetTime, system properties, object sizing   |
 | 8   | lab08_exception_agent               | Exception/ExceptionCatch callbacks, filtering, stack traces |
+| 8b  | lab08b_mini_debugger                | A mini debugger: deferred breakpoints, locals, single-stepping, field watchpoints |
 | 9   | lab09_advanced_techniques           | Raw monitors, TLS, reentrancy guards, thread-safe logging  |
 | 10  | lab10_profiler_agent                | Minimal sampling profiler with flamegraph output           |
 | 11  | lab11_deployment_agent              | Production agent: OnLoad + OnAttach, config, log rotation  |
@@ -79,6 +80,7 @@ See the `README.md` in each lab directory for specific instructions.
 - **Class Patcher** -- rewrites a string literal in a class's constant pool, at load time or via `RetransformClasses` after attach
 - **JVM Runtime** -- times GC events with `GetTime`, reads system properties
 - **Exception Handling** -- captures exceptions with throw/catch locations, JDK filtering, and safe JNI use
+- **Mini Debugger** -- `SetBreakpoint` on a source line, `GetLocal*`, per-thread `SingleStep`, and `SetFieldModificationWatch`
 - **Advanced Techniques** -- raw monitors, Thread-Local Storage, reentrancy guards
 - **Profiler** -- sampling profiler: dedicated agent thread, `GetStackTrace`, collapsed-stack/flamegraph output
 - **Deployment** -- configurable production agent with `Agent_OnAttach`, rotation-safe logging

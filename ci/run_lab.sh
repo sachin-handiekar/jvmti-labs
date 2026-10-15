@@ -169,6 +169,24 @@ lab08_exception_agent)
     expect $L 'Caught at: LExceptionTestApp;\.main'
     expect $L 'UNCAUGHT Ljava/lang/ArrayIndexOutOfBoundsException;'   # Doomed thread
     ;;
+lab08b_mini_debugger)
+    run "" DebugTestApp
+    expect out.txt '^\[Debugger\] Breakpoint set: DebugTestApp\.checkout line 21 '
+    # Watchpoint sees the static initializer, then both writes in main
+    expect out.txt '^\[Debugger\] Watch: DebugTestApp\.balance 0 -> 100 .*<clinit>'
+    expect out.txt '^\[Debugger\] Watch: DebugTestApp\.balance 100 -> 45 .*main line 30'
+    expect out.txt '^\[Debugger\] Watch: DebugTestApp\.balance 45 -> 50 .*main line 31'
+    # Breakpoint shows exactly the locals in scope on line 21
+    expect out.txt '^\[Debugger\] Breakpoint hit: DebugTestApp\.checkout line 21$'
+    expect out.txt '^ +prices +int\[\] += \{20, 30, 15\}$'
+    expect out.txt '^ +customer +String = "alice"$'
+    expect out.txt '^ +total +I += 65$'
+    reject out.txt '^ +(discount|charged|price) '
+    # Single-stepping covers the rest of the method, then stops in main
+    for l in 22 23 24; do expect out.txt "^\\[Debugger\\]   step -> line $l\$"; done
+    expect out.txt '^\[Debugger\] Returned to DebugTestApp\.main line 29; stepping off$'
+    expect out.txt '^DebugTestApp finished, balance = 50$'
+    ;;
 lab09_advanced_techniques)
     run "" AdvancedTestApp
     L=advanced_agent.log

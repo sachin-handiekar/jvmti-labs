@@ -37,6 +37,7 @@ jobs:
           - lab06b_class_patcher
           - lab07_jvm_runtime_agent
           - lab08_exception_agent
+          - lab08b_mini_debugger
           - lab09_advanced_techniques
           - lab10_profiler_agent
           - lab11_deployment_agent
