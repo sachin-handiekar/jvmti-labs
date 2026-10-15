@@ -85,17 +85,22 @@ static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
         jvmti_log(LOG_FILE, buf);
     }
 
-    /* Demonstrate GetObjectSize on the java.lang.String class object */
-    jclass string_class = (*jni)->FindClass(jni, "java/lang/String");
-    if (string_class) {
+    /* Demonstrate GetObjectSize on a real String instance. The size is
+       *shallow*: just the String object itself — its characters live in
+       a separate byte[] that GetObjectSize does not include. */
+    jstring str = (*jni)->NewStringUTF(jni, "hello, JVMTI");
+    if (str == NULL) {
+        (*jni)->ExceptionClear(jni);   /* pending OutOfMemoryError */
+    } else {
         jlong size = 0;
-        jvmtiError err = (*jvmti)->GetObjectSize(jvmti, string_class, &size);
+        jvmtiError err = (*jvmti)->GetObjectSize(jvmti, str, &size);
         if (err == JVMTI_ERROR_NONE) {
             snprintf(buf, sizeof(buf),
-                     "[Runtime] Size of String class object: %lld bytes",
+                     "[Runtime] Shallow size of a String instance: %lld bytes",
                      (long long)size);
             jvmti_log(LOG_FILE, buf);
         }
+        (*jni)->DeleteLocalRef(jni, str);
     }
 }
 

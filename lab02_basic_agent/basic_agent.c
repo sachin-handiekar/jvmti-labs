@@ -19,10 +19,9 @@
 #include "jvmti_utils.h"
 #include <stdlib.h>
 
-#define LOG_FILE "basic_agent.log"
-
 /* Agent configuration parsed from options string */
 static int verbose_mode = 0;
+static char log_file[512] = "basic_agent.log";   /* output=<path> */
 
 /* ------------------------------------------------------------------ */
 /*  Option Parsing                                                     */
@@ -47,6 +46,10 @@ static void parse_options(const char* options) {
             if (strcmp(key, "verbose") == 0 && strcmp(value, "true") == 0) {
                 verbose_mode = 1;
                 printf("[Agent] Verbose mode enabled\n");
+            } else if (strcmp(key, "output") == 0 && value[0] != '\0') {
+                strncpy(log_file, value, sizeof(log_file) - 1);
+                log_file[sizeof(log_file) - 1] = '\0';
+                printf("[Agent] Logging to %s\n", log_file);
             }
         }
         token = strtok(NULL, ",");
@@ -59,7 +62,7 @@ static void parse_options(const char* options) {
 /* ------------------------------------------------------------------ */
 
 static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
-    jvmti_log(LOG_FILE, "[Agent] VMInit event — JVM is fully initialized.");
+    jvmti_log(log_file, "[Agent] VMInit event — JVM is fully initialized.");
 
     if (verbose_mode) {
         /* Print JVM version info */
@@ -69,7 +72,7 @@ static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
         if (err == JVMTI_ERROR_NONE && vm_version) {
             char buf[256];
             snprintf(buf, sizeof(buf), "[Agent] JVM version: %s", vm_version);
-            jvmti_log(LOG_FILE, buf);
+            jvmti_log(log_file, buf);
             (*jvmti)->Deallocate(jvmti, (unsigned char*)vm_version);
         }
 
@@ -81,14 +84,14 @@ static void JNICALL cbVMInit(jvmtiEnv *jvmti, JNIEnv *jni, jthread thread) {
             char buf[256];
             snprintf(buf, sizeof(buf),
                      "[Agent] Loaded classes at VMInit: %d", (int)class_count);
-            jvmti_log(LOG_FILE, buf);
+            jvmti_log(log_file, buf);
             (*jvmti)->Deallocate(jvmti, (unsigned char*)classes);
         }
     }
 }
 
 static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
-    jvmti_log(LOG_FILE, "[Agent] VMDeath event — JVM is shutting down.");
+    jvmti_log(log_file, "[Agent] VMDeath event — JVM is shutting down.");
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,11 +126,11 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
                                              JVMTI_EVENT_VM_DEATH, NULL);
     CHECK_JVMTI_ERROR(jvmti, err, "Enable VMDeath");
 
-    jvmti_log(LOG_FILE, "[Agent] Agent_OnLoad complete — waiting for events.");
+    jvmti_log(log_file, "[Agent] Agent_OnLoad complete — waiting for events.");
     return JNI_OK;
 }
 
 JNIEXPORT void JNICALL Agent_OnUnload(JavaVM *vm) {
     printf("[Agent] basic_agent unloaded\n");
-    jvmti_log(LOG_FILE, "[Agent] Agent_OnUnload — cleanup complete.");
+    jvmti_log(log_file, "[Agent] Agent_OnUnload — cleanup complete.");
 }

@@ -21,7 +21,13 @@ cmake --build .
 ```sh
 javac HelloApp.java
 java -agentpath:./build/libbasic_agent.so=verbose=true HelloApp
+
+# Same, logging to a custom file (the §2.5 example)
+java -agentpath:./build/libbasic_agent.so=verbose=true,output=/tmp/trace.log HelloApp
 ```
+
+Supported options: `verbose=true` (log JVM version and loaded-class count at `VMInit`) and
+`output=<path>` (log file, default `basic_agent.log`).
 
 On Windows use `.dll`, on macOS use `.dylib`.
 
@@ -38,4 +44,4 @@ HelloApp: Done.
 [Agent] basic_agent unloaded
 ```
 
-Check `basic_agent.log` for detailed event logs.
+Check `basic_agent.log` (or your `output=` path) for detailed event logs.

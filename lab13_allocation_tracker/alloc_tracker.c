@@ -27,8 +27,10 @@
 #include <stdlib.h>
 
 #define LOG_FILE      "alloc_tracker.log"
-#define JSON_FILE     "allocations.json"
-#define MAX_CLASSES   1024
+#define MAX_CLASSES   4096
+
+/* JSON report path — override with the agent option output=<path> */
+static char output_path[512] = "alloc_report.json";
 
 /* Sample roughly every 64 KB of allocation per thread
    (default is 512 KB; lower = more samples, more overhead) */
@@ -67,7 +69,7 @@ static int find_or_add_class(const char* sig) {
 /* ------------------------------------------------------------------ */
 
 static void dump_json(void) {
-    FILE* fp = fopen(JSON_FILE, "w");
+    FILE* fp = fopen(output_path, "w");
     if (!fp) {
         jvmti_log(LOG_FILE, "[Tracker] ERROR: Cannot open JSON output file.");
         return;
@@ -98,10 +100,10 @@ static void dump_json(void) {
     fprintf(fp, "}\n");
     fclose(fp);
 
-    char buf[256];
+    char buf[sizeof(output_path) + 128];
     snprintf(buf, sizeof(buf),
              "[Tracker] JSON report written to %s (%d classes, %ld samples)",
-             JSON_FILE, alloc_table_size, total_samples);
+             output_path, alloc_table_size, total_samples);
     jvmti_log(LOG_FILE, buf);
 }
 
@@ -145,10 +147,22 @@ static void JNICALL cbVMDeath(jvmtiEnv *jvmti, JNIEnv *jni) {
 
     /* Print summary to console */
     printf("[Tracker] Sampled allocations for %d classes. See %s for details.\n",
-           alloc_table_size, JSON_FILE);
+           alloc_table_size, output_path);
     (*jvmti)->RawMonitorExit(jvmti, alloc_lock);
+    /* alloc_lock is deliberately NOT destroyed: other threads keep
+       allocating (and sampling) while VMDeath runs, and destroying a
+       monitor they may still enter is a use-after-free. */
+}
 
-    (*jvmti)->DestroyRawMonitor(jvmti, alloc_lock);
+/* ------------------------------------------------------------------ */
+/*  Option parsing: output=<path> (§13.5)                              */
+/* ------------------------------------------------------------------ */
+
+static void parse_options(const char *options) {
+    if (options && strncmp(options, "output=", 7) == 0) {
+        strncpy(output_path, options + 7, sizeof(output_path) - 1);
+        output_path[sizeof(output_path) - 1] = '\0';
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,6 +174,8 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
 
     jvmtiEnv* jvmti = jvmti_get_env(vm);
     if (!jvmti) return JNI_ERR;
+
+    parse_options(options);
 
     jvmtiError err;
 

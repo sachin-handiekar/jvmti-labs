@@ -1,6 +1,6 @@
 # JVMTI Labs
 
-This repository contains hands-on labs for learning JVMTI (JVM Tool Interface).
+This repository contains hands-on labs for learning JVMTI (JVM Tool Interface). They are the companion code for the book [Learning JVMTI](https://github.com/sachin-handiekar/learning-jvmti): lab *N* goes with chapter *N*.
 
 Each lab directory contains a self-contained JVMTI agent with a companion Java test application, CMake build file, and lab-specific README.
 
@@ -11,9 +11,9 @@ Each lab directory contains a self-contained JVMTI agent with a companion Java t
 | 1   | lab01_capability_checker            | List potential JVMTI capabilities of the JVM               |
 | 2   | lab02_basic_agent                   | Agent lifecycle, options parsing, event registration       |
 | 3   | lab03_event_registration            | Capabilities, event callbacks, method/thread tracking      |
-| 4   | lab04_thread_class_inspection       | Thread dump: states, stack walking, line numbers           |
+| 4   | lab04_thread_class_inspection       | Thread dump: states (incl. TIMED_WAITING vs WAITING), stack walking, line numbers |
 | 5   | lab05_heap_stack_agent              | Heap walking with IterateThroughHeap, stack analysis       |
-| 6   | lab06_class_transform_agent         | Class transformation and bytecode instrumentation          |
+| 6   | lab06_class_transform_agent         | Class load monitor built on ClassFileLoadHook              |
 | 7   | lab07_jvm_runtime_agent             | GC events with GetTime, system properties, object sizing   |
 | 8   | lab08_exception_agent               | Exception/ExceptionCatch callbacks, filtering, stack traces |
 | 9   | lab09_advanced_techniques           | Raw monitors, TLS, reentrancy guards, thread-safe logging  |
@@ -72,7 +72,7 @@ See the `README.md` in each lab directory for specific instructions.
 - **Event Registration** -- the three-step event model: capabilities, callbacks, notification modes
 - **Thread/Class Inspection** -- Java-style thread dump with states, stack frames, and source lines
 - **Heap/Stack Analysis** -- walks the heap with the modern `IterateThroughHeap` API, dumps thread stacks
-- **Class Transformation** -- demonstrates bytecode interception via ClassFileLoadHook
+- **Class Load Monitor** -- sees every class's bytecode via ClassFileLoadHook, with JDK filtering and a load summary
 - **JVM Runtime** -- times GC events with `GetTime`, reads system properties
 - **Exception Handling** -- captures exceptions with throw/catch locations, JDK filtering, and safe JNI use
 - **Advanced Techniques** -- raw monitors, Thread-Local Storage, reentrancy guards
