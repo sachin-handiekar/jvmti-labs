@@ -85,7 +85,10 @@ lab02_basic_agent)
 lab03_event_registration)
     run "" EventTestApp
     expect out.txt 'VMDeath\. Total method entries: [1-9][0-9]*'
-    expect event_logger_agent.log 'Thread started: '
+    for i in 0 1 2 3 4; do
+        expect event_logger_agent.log "Thread started: EventWorker-$i$"
+        expect event_logger_agent.log "Thread ended: EventWorker-$i$"
+    done
     ;;
 lab04_thread_class_inspection)
     run "" StackTestApp
@@ -98,7 +101,10 @@ lab04_thread_class_inspection)
     ;;
 lab05_heap_stack_agent)
     run "" HeapStackTestApp
-    expect heap_stack_agent.log 'Heap: [1-9][0-9]* objects, [1-9][0-9]* bytes total'
+    L=heap_stack_agent.log
+    expect $L '^\[Heap\] [1-9][0-9]* objects, [1-9][0-9]* bytes in [1-9][0-9]* classes'
+    expect $L ' 20000 +[0-9]+  LHeapStackTestApp\$CacheEntry;$'   # the leak, via class tags
+    expect $L 'at LHeapStackTestApp;\.recursiveWork'               # daemon worker stacks
     ;;
 lab06_class_transform_agent)
     run "" TransformTestApp
@@ -111,6 +117,8 @@ lab07_jvm_runtime_agent)
     expect out.txt '^\[GC\] [1-9][0-9]* collections'
     expect jvm_runtime_agent.log 'java\.vm\.name = '
     expect jvm_runtime_agent.log 'Shallow size of a String instance: [1-9][0-9]* bytes'
+    expect jvm_runtime_agent.log '^\[CPU\] thread "CpuBurner" used [1-9][0-9.]* ms'
+    expect jvm_runtime_agent.log '^\[CPU\] thread "Sleeper" used'
     ;;
 lab08_exception_agent)
     run "" ExceptionTestApp
@@ -118,10 +126,17 @@ lab08_exception_agent)
     expect $L 'CAUGHT Ljava/lang/IllegalArgumentException;'
     expect $L 'CAUGHT Ljava/lang/NumberFormatException;'   # thrown inside the JDK, caught by the app
     expect $L 'Caught at: LExceptionTestApp;\.main'
+    expect $L 'UNCAUGHT Ljava/lang/ArrayIndexOutOfBoundsException;'   # Doomed thread
     ;;
 lab09_advanced_techniques)
     run "" AdvancedTestApp
-    expect advanced_agent.log '\[ThreadEnd\] TLS cleanup: [0-9]+ method entries'
+    L=advanced_agent.log
+    for w in A B C; do
+        expect $L "^\\[ThreadEnd\\] Worker-$w — [1-9][0-9]* method entries"
+    done
+    # The global total must be exactly the sum of the per-thread counts
+    sum=$(grep '^\[ThreadEnd\]' $L | sed 's/.* — \([0-9]*\) method entries/\1/' | awk '{s+=$1} END{print s}')
+    expect $L "^\\[Agent\\] VMDeath — $sum method entries"
     ;;
 lab10_profiler_agent)
     run "" ProfilerTestApp
@@ -137,6 +152,27 @@ lab11_deployment_agent)
     expect $L '^\[Entry\] Lcom/example/DeployTestApp;\.compute\(I\)I'
     expect $L '^\[ThreadStart\] DeployWorker'
     reject $L '^\[Entry\] Ljava/'
+
+    # Live attach (§11.4): run the app in --wait mode, then load the agent
+    # into it with AgentLoader. EnableDynamicAgentLoading only exists on
+    # JDK 21+, hence IgnoreUnrecognizedVMOptions for older JDKs.
+    mkdir attach && cd attach
+    java -XX:+IgnoreUnrecognizedVMOptions -XX:+EnableDynamicAgentLoading \
+         -cp .. com.example.DeployTestApp --wait 5 > app.txt 2>&1 &
+    APP=$!
+    PID=""
+    for _ in $(seq 1 60); do
+        PID=$(jps -l | awk '/com\.example\.DeployTestApp/ {print $1}')
+        [ -n "$PID" ] && break
+        sleep 0.25
+    done
+    [ -n "$PID" ] || { echo "FAIL: DeployTestApp did not start"; cat app.txt; exit 1; }
+    echo "+ java AgentLoader $PID <agent> package=com/example,thread_events"
+    java -cp .. AgentLoader "$PID" "$AGENT" "package=com/example,thread_events"
+    wait $APP
+    cat app.txt
+    expect prod_agent.log 'attached to running JVM \(package=com/example .*threads=1\)'
+    expect prod_agent.log '^\[ThreadStart\] DeployWorker-[0-9]+'
     ;;
 lab12_stability_agent)
     run "" StabilityTestApp

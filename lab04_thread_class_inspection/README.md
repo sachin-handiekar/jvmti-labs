@@ -1,5 +1,7 @@
 # Lab 4 — Inspecting Threads, Stacks, and Methods
 
+> **Book:** companion to [Chapter 4: Inspecting Threads, Stacks, and Methods](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter4.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A thread-dump agent (§4.5) that, at `VMDeath`:
 
 - Enumerates all live threads with `GetAllThreads` / `GetThreadInfo`

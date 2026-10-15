@@ -1,5 +1,7 @@
 # Lab 6 — Class Transformation and Bytecode Instrumentation
 
+> **Book:** companion to [Chapter 6: Class Transformation and Bytecode Instrumentation](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter6.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A class-load monitor (§6.7) built on the **ClassFileLoadHook** event, which the JVM calls
 with the raw class-file bytes of every class *before* it is defined — the same hook every
 bytecode-instrumentation agent uses.

@@ -1,5 +1,7 @@
 # Lab 02 — Basic JVMTI Agent
 
+> **Book:** companion to [Chapter 2: Anatomy of a JVMTI Agent](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter2.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 This example demonstrates the fundamental building blocks of a JVMTI agent:
 
 - **Agent lifecycle**: `Agent_OnLoad` and `Agent_OnUnload` entry points

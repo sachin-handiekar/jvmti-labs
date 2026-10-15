@@ -1,5 +1,7 @@
 # Lab 11 — Deploying and Testing JVMTI Agents
 
+> **Book:** companion to [Chapter 11: Deploying and Testing JVMTI Agents](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter11.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A configurable, production-style JVMTI agent demonstrating deployment concerns:
 
 - **Both entry points**: `Agent_OnLoad` (startup) and `Agent_OnAttach` (live attach,
@@ -30,21 +32,41 @@ java -agentpath:./build/libprod_agent.so=package=com/example,method_entry,thread
 
 (On Windows use `build\prod_agent.dll`, on macOS `build/libprod_agent.dylib`.)
 
-### Attach to a running JVM (Java 9+)
+### Attach to a running JVM (§11.4)
+
+Start the app in `--wait` mode: it keeps starting worker threads for the given number of
+seconds and prints its PID. Then, from a second terminal, load the agent with either the
+book's `AgentLoader` (Attach API) or `jcmd`:
 
 ```sh
-jps                                                        # find the PID
-jcmd <pid> JVMTI.agent_load /abs/path/libprod_agent.so thread_events
+javac -d . DeployTestApp.java AgentLoader.java
+java -XX:+EnableDynamicAgentLoading -cp . com.example.DeployTestApp --wait 30
+
+# second terminal — either of these:
+java -cp . AgentLoader <pid> /abs/path/build/libprod_agent.so package=com/example,thread_events,method_entry
+jcmd <pid> JVMTI.agent_load /abs/path/build/libprod_agent.so package=com/example,thread_events
 ```
 
-> **Java 21+ note:** dynamic attach prints a warning by default (JEP 451). Add
-> `-XX:+EnableDynamicAgentLoading` to the target JVM to suppress it.
+`prod_agent.log` then shows the JVM calling `Agent_OnAttach` and the agent degrading
+gracefully. On HotSpot, `method_entry` can't be added once the JVM is running:
+
+```
+[JVMTI] method_entry unavailable on this JVM/phase — disabled.
+[JVMTI] Production agent v1.1.0 attached to running JVM (package=com/example entry=0 exit=0 threads=1)
+[ThreadStart] DeployWorker-4
+[ThreadEnd] DeployWorker-4
+...
+```
+
+> **JDK 21+ note:** dynamic attach prints a warning by default (JEP 451); the
+> `-XX:+EnableDynamicAgentLoading` flag above suppresses it. The flag doesn't exist before
+> JDK 21 — on older JDKs omit it (or add `-XX:+IgnoreUnrecognizedVMOptions`).
 
 ### Available options
 
 | Option | Effect |
 |--------|--------|
-| `package=<prefix>` | Only monitor methods whose class contains the prefix (default: `com/example`) |
+| `package=<prefix>` | Only monitor methods whose class name starts with the prefix (default: `com/example`) |
 | `method_entry` | Enable method entry logging |
 | `method_exit` | Enable method exit logging |
 | `thread_events` | Enable thread start/end logging |

@@ -3,7 +3,7 @@
  *
  * Usage:
  *   javac HelloApp.java
- *   java -agentpath:./build/libbasic_agent.so=verbose HelloApp
+ *   java -agentpath:./build/libbasic_agent.so=verbose=true HelloApp
  */
 public class HelloApp {
     public static void main(String[] args) {

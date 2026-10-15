@@ -1,5 +1,7 @@
 # Lab 12 — Security and Stability
 
+> **Book:** companion to [Chapter 12: Security and Stability](https://github.com/sachin-handiekar/learning-jvmti/blob/master/manuscript/chapter12.md) of *Learning JVMTI*. Read the chapter for the concepts; build and run the code here.
+
 A JVMTI agent runs as **native code inside the JVM process** — a single null pointer
 dereference crashes the entire application. This example demonstrates the defensive
 patterns from Chapter 12 that separate prototype agents from production-ready ones.
